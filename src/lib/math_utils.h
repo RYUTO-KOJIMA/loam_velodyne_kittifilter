@@ -1,12 +1,13 @@
+
+// math_utils.h
+
 #ifndef LOAM_MATH_UTILS_H
 #define LOAM_MATH_UTILS_H
-
 
 #include "loam_velodyne/Angle.h"
 #include "loam_velodyne/Vector3.h"
 
 #include <cmath>
-
 
 namespace loam {
 
@@ -20,8 +21,6 @@ inline double rad2deg(double radians)
   return radians * 180.0 / M_PI;
 }
 
-
-
 /** \brief Convert the given radian angle to degrees.
  *
  * @param radians The radian angle to convert.
@@ -29,10 +28,8 @@ inline double rad2deg(double radians)
  */
 inline float rad2deg(float radians)
 {
-  return (float) (radians * 180.0 / M_PI);
+    return static_cast<float>(radians * 180.0 / M_PI);
 }
-
-
 
 /** \brief Convert the given degree angle to radian.
  *
@@ -41,10 +38,8 @@ inline float rad2deg(float radians)
  */
 inline double deg2rad(double degrees)
 {
-  return degrees * M_PI / 180.0;
+    return degrees * M_PI / 180.0;
 }
-
-
 
 /** \brief Convert the given degree angle to radian.
  *
@@ -53,11 +48,8 @@ inline double deg2rad(double degrees)
  */
 inline float deg2rad(float degrees)
 {
-  return (float) (degrees * M_PI / 180.0);
+    return static_cast<float>(degrees * M_PI / 180.0);
 }
-
-
-
 
 /** \brief Calculate the squared difference of the given two points.
  *
@@ -68,14 +60,12 @@ inline float deg2rad(float degrees)
 template <typename PointT>
 inline float calcSquaredDiff(const PointT& a, const PointT& b)
 {
-  float diffX = a.x - b.x;
-  float diffY = a.y - b.y;
-  float diffZ = a.z - b.z;
+    const float diffX = a.x - b.x;
+    const float diffY = a.y - b.y;
+    const float diffZ = a.z - b.z;
 
-  return diffX * diffX + diffY * diffY + diffZ * diffZ;
+    return diffX * diffX + diffY * diffY + diffZ * diffZ;
 }
-
-
 
 /** \brief Calculate the squared difference of the given two points.
  *
@@ -85,15 +75,14 @@ inline float calcSquaredDiff(const PointT& a, const PointT& b)
  * @return The squared difference between point a and b.
  */
 template <typename PointT>
-inline float calcSquaredDiff(const PointT& a, const PointT& b, const float& wb)
+inline float calcSquaredDiff(const PointT& a, const PointT& b, const float wb)
 {
-  float diffX = a.x - b.x * wb;
-  float diffY = a.y - b.y * wb;
-  float diffZ = a.z - b.z * wb;
+    const float diffX = a.x - b.x * wb;
+    const float diffY = a.y - b.y * wb;
+    const float diffZ = a.z - b.z * wb;
 
-  return diffX * diffX + diffY * diffY + diffZ * diffZ;
+    return diffX * diffX + diffY * diffY + diffZ * diffZ;
 }
-
 
 /** \brief Calculate the absolute distance of the point to the origin.
  *
@@ -103,10 +92,8 @@ inline float calcSquaredDiff(const PointT& a, const PointT& b, const float& wb)
 template <typename PointT>
 inline float calcPointDistance(const PointT& p)
 {
-  return std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+    return std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
 }
-
-
 
 /** \brief Calculate the squared distance of the point to the origin.
  *
@@ -116,165 +103,150 @@ inline float calcPointDistance(const PointT& p)
 template <typename PointT>
 inline float calcSquaredPointDistance(const PointT& p)
 {
-  return p.x * p.x + p.y * p.y + p.z * p.z;
+    return p.x * p.x + p.y * p.y + p.z * p.z;
 }
-
-
 
 /** \brief Rotate the given vector by the specified angle around the x-axis.
  *
- * @param v the vector to rotate
- * @param ang the rotation angle
+ * @param v The vector to rotate
+ * @param ang The rotation angle
  */
 inline void rotX(Vector3& v, const Angle& ang)
 {
-  float y = v.y();
-  v.y() = ang.cos() * y - ang.sin() * v.z();
-  v.z() = ang.sin() * y + ang.cos() * v.z();
+    const float y = v.y();
+    v.y() = ang.cos() * y - ang.sin() * v.z();
+    v.z() = ang.sin() * y + ang.cos() * v.z();
 }
 
 /** \brief Rotate the given point by the specified angle around the x-axis.
  *
- * @param p the point to rotate
- * @param ang the rotation angle
+ * @param p The point to rotate
+ * @param ang The rotation angle
  */
 template <typename PointT>
 inline void rotX(PointT& p, const Angle& ang)
 {
-  float y = p.y;
-  p.y = ang.cos() * y - ang.sin() * p.z;
-  p.z = ang.sin() * y + ang.cos() * p.z;
+    float y = p.y;
+    p.y = ang.cos() * y - ang.sin() * p.z;
+    p.z = ang.sin() * y + ang.cos() * p.z;
 }
-
-
 
 /** \brief Rotate the given vector by the specified angle around the y-axis.
  *
- * @param v the vector to rotate
- * @param ang the rotation angle
+ * @param v The vector to rotate
+ * @param ang The rotation angle
  */
 inline void rotY(Vector3& v, const Angle& ang)
 {
-  float x = v.x();
-  v.x() = ang.cos() * x + ang.sin() * v.z();
-  v.z() = ang.cos() * v.z() - ang.sin() * x;
+    float x = v.x();
+    v.x() =  ang.cos() * x + ang.sin() * v.z();
+    v.z() = -ang.sin() * x + ang.cos() * v.z();
 }
 
 /** \brief Rotate the given point by the specified angle around the y-axis.
  *
- * @param p the point to rotate
- * @param ang the rotation angle
+ * @param p The point to rotate
+ * @param ang The rotation angle
  */
 template <typename PointT>
 inline void rotY(PointT& p, const Angle& ang)
 {
-  float x = p.x;
-  p.x = ang.cos() * x + ang.sin() * p.z;
-  p.z = ang.cos() * p.z - ang.sin() * x;
+    float x = p.x;
+    p.x =  ang.cos() * x + ang.sin() * p.z;
+    p.z = -ang.sin() * x + ang.cos() * p.z;
 }
-
-
 
 /** \brief Rotate the given vector by the specified angle around the z-axis.
  *
- * @param v the vector to rotate
- * @param ang the rotation angle
+ * @param v The vector to rotate
+ * @param ang The rotation angle
  */
 inline void rotZ(Vector3& v, const Angle& ang)
 {
-  float x = v.x();
-  v.x() = ang.cos() * x - ang.sin() * v.y();
-  v.y() = ang.sin() * x + ang.cos() * v.y();
+    float x = v.x();
+    v.x() = ang.cos() * x - ang.sin() * v.y();
+    v.y() = ang.sin() * x + ang.cos() * v.y();
 }
 
 /** \brief Rotate the given point by the specified angle around the z-axis.
  *
- * @param p the point to rotate
- * @param ang the rotation angle
+ * @param p The point to rotate
+ * @param ang The rotation angle
  */
 template <typename PointT>
 inline void rotZ(PointT& p, const Angle& ang)
 {
-  float x = p.x;
-  p.x = ang.cos() * x - ang.sin() * p.y;
-  p.y = ang.sin() * x + ang.cos() * p.y;
+    float x = p.x;
+    p.x = ang.cos() * x - ang.sin() * p.y;
+    p.y = ang.sin() * x + ang.cos() * p.y;
 }
 
-
-
-/** \brief Rotate the given vector by the specified angles around the z-, x- respectively y-axis.
+/** \brief Rotate the given vector by the specified angles
+ * around the z, x, and y axes.
  *
- * @param v the vector to rotate
- * @param angZ the rotation angle around the z-axis
- * @param angX the rotation angle around the x-axis
- * @param angY the rotation angle around the y-axis
+ * @param v The vector to rotate
+ * @param angZ The rotation angle around the z-axis
+ * @param angX The rotation angle around the x-axis
+ * @param angY The rotation angle around the y-axis
  */
-inline void rotateZXY(Vector3& v,
-                      const Angle& angZ,
-                      const Angle& angX,
-                      const Angle& angY)
+inline void rotateZXY(
+    Vector3& v, const Angle& angZ, const Angle& angX, const Angle& angY)
 {
-  rotZ(v, angZ);
-  rotX(v, angX);
-  rotY(v, angY);
+    rotZ(v, angZ);
+    rotX(v, angX);
+    rotY(v, angY);
 }
 
-/** \brief Rotate the given point by the specified angles around the z-, x- respectively y-axis.
+/** \brief Rotate the given point by the specified angles
+ * around the z, x, and y axes.
  *
- * @param p the point to rotate
- * @param angZ the rotation angle around the z-axis
- * @param angX the rotation angle around the x-axis
- * @param angY the rotation angle around the y-axis
+ * @param p The point to rotate
+ * @param angZ The rotation angle around the z-axis
+ * @param angX The rotation angle around the x-axis
+ * @param angY The rotation angle around the y-axis
  */
 template <typename PointT>
-inline void rotateZXY(PointT& p,
-                      const Angle& angZ,
-                      const Angle& angX,
-                      const Angle& angY)
+inline void rotateZXY(
+    PointT& p, const Angle& angZ, const Angle& angX, const Angle& angY)
 {
-  rotZ(p, angZ);
-  rotX(p, angX);
-  rotY(p, angY);
+    rotZ(p, angZ);
+    rotX(p, angX);
+    rotY(p, angY);
 }
 
-
-
-/** \brief Rotate the given vector by the specified angles around the y-, x- respectively z-axis.
+/** \brief Rotate the given vector by the specified angles around
+ * the y, x, and z axes.
  *
- * @param v the vector to rotate
- * @param angY the rotation angle around the y-axis
- * @param angX the rotation angle around the x-axis
- * @param angZ the rotation angle around the z-axis
+ * @param v The vector to rotate
+ * @param angY The rotation angle around the y-axis
+ * @param angX The rotation angle around the x-axis
+ * @param angZ The rotation angle around the z-axis
  */
-inline void rotateYXZ(Vector3& v,
-                      const Angle& angY,
-                      const Angle& angX,
-                      const Angle& angZ)
+inline void rotateYXZ(
+    Vector3& v, const Angle& angY, const Angle& angX, const Angle& angZ)
 {
-  rotY(v, angY);
-  rotX(v, angX);
-  rotZ(v, angZ);
+    rotY(v, angY);
+    rotX(v, angX);
+    rotZ(v, angZ);
 }
 
-/** \brief Rotate the given point by the specified angles around the y-, x- respectively z-axis.
+/** \brief Rotate the given point by the specified angles around
+ * the y, x, and z axes.
  *
- * @param p the point to rotate
- * @param angY the rotation angle around the y-axis
- * @param angX the rotation angle around the x-axis
- * @param angZ the rotation angle around the z-axis
+ * @param p The point to rotate
+ * @param angY The rotation angle around the y-axis
+ * @param angX The rotation angle around the x-axis
+ * @param angZ The rotation angle around the z-axis
  */
 template <typename PointT>
-inline void rotateYXZ(PointT& p,
-                      const Angle& angY,
-                      const Angle& angX,
-                      const Angle& angZ)
+inline void rotateYXZ(
+    PointT& p, const Angle& angY, const Angle& angX, const Angle& angZ)
 {
-  rotY(p, angY);
-  rotX(p, angX);
-  rotZ(p, angZ);
+    rotY(p, angY);
+    rotX(p, angX);
+    rotZ(p, angZ);
 }
 
-} // end namespace loam
-
+} // namespace loam
 
 #endif // LOAM_MATH_UTILS_H
