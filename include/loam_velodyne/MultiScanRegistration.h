@@ -109,40 +109,48 @@ private:
 /** \brief Class for registering point clouds received from multi-laser lidars.
  *
  */
-class MultiScanRegistration : virtual public ScanRegistration {
+class MultiScanRegistration : virtual public ScanRegistration
+{
 public:
-  MultiScanRegistration(const MultiScanMapper& scanMapper = MultiScanMapper());
+    MultiScanRegistration(
+        const MultiScanMapper& scanMapper = MultiScanMapper());
 
+    bool setup(ros::NodeHandle& node, ros::NodeHandle& privateNode);
 
-  bool setup(ros::NodeHandle& node, ros::NodeHandle& privateNode);
+    /** \brief Handler method for input cloud messages.
+     *
+     * @param laserCloudMsg The new input cloud message to process
+     */
+    void handleCloudMessage(
+        const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg);
 
-  /** \brief Handler method for input cloud messages.
-   *
-   * @param laserCloudMsg the new input cloud message to process
-   */
-  void handleCloudMessage(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg);
+    private:
+    /** \brief Setup component in active mode.
+     *
+     * @param node The ROS node handle
+     * @param privateNode The private ROS node handle
+     */
+    bool setupROS(ros::NodeHandle& node,
+                  ros::NodeHandle& privateNode,
+                  RegistrationParams& configOut) override;
+
+    /** \brief Process a new input cloud.
+     *
+     * @param laserCloudIn The new input cloud to process
+     * @param scanTime The scan (message) timestamp
+     */
+    void process(const pcl::PointCloud<pcl::PointXYZ>& laserCloudIn,
+                 const Time& scanTime);
 
 private:
-  /** \brief Setup component in active mode.
-   *
-   * @param node the ROS node handle
-   * @param privateNode the private ROS node handle
-   */
-  bool setupROS(ros::NodeHandle& node, ros::NodeHandle& privateNode, RegistrationParams& config_out) override;
-
-  /** \brief Process a new input cloud.
-   *
-   * @param laserCloudIn the new input cloud to process
-   * @param scanTime the scan (message) timestamp
-   */
-  void process(const pcl::PointCloud<pcl::PointXYZ>& laserCloudIn, const Time& scanTime);
-
-private:
-  int _systemDelay = 20;             ///< system startup delay counter
-  MultiScanMapper _scanMapper;  ///< mapper for mapping vertical point angles to scan ring IDs
-  std::vector<pcl::PointCloud<pcl::PointXYZI> > _laserCloudScans;
-  ros::Subscriber _subLaserCloud;   ///< input cloud message subscriber
-
+    // System startup delay counter
+    int _systemDelay = 20;
+    // Mapper for mapping vertical point angles to scan ring IDs
+    MultiScanMapper _scanMapper;
+    // Full resolution point cloud grouped by rings (vertical angles)
+    std::vector<pcl::PointCloud<pcl::PointXYZI>> _laserCloudScans;
+    // Input cloud message subscriber
+    ros::Subscriber _subLaserCloud;
 };
 
 } // namespace loam
