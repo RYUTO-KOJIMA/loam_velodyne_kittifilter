@@ -1,3 +1,6 @@
+
+// ScanRegistration.cpp
+
 // Copyright 2013, Ji Zhang, Carnegie Mellon University
 // Further contributions copyright (c) 2016, Southwest Research Institute
 // All rights reserved.
@@ -35,167 +38,191 @@
 
 #include <tf/transform_datatypes.h>
 
-
 namespace loam {
 
-
-
-bool ScanRegistration::parseParams(const ros::NodeHandle& nh, RegistrationParams& config_out) 
+bool ScanRegistration::parseParams(
+    const ros::NodeHandle& nh, RegistrationParams& configOut) 
 {
-  bool success = true;
-  int iParam = 0;
-  float fParam = 0;
+    int intVal = 0;
+    float floatVal = 0.0f;
 
-  if (nh.getParam("scanPeriod", fParam)) {
-    if (fParam <= 0) {
-      ROS_ERROR("Invalid scanPeriod parameter: %f (expected > 0)", fParam);
-      success = false;
-    } else {
-        config_out.scanPeriod = fParam;
-      ROS_INFO("Set scanPeriod: %g", fParam);
+    if (nh.getParam("scanPeriod", floatVal)) {
+        if (floatVal <= 0) {
+            ROS_ERROR("Invalid scanPeriod: %f (expected > 0)", floatVal);
+            return false;
+        } else {
+            configOut.scanPeriod = floatVal;
+            ROS_INFO("Set scanPeriod: %g", floatVal);
+        }
     }
-  }
 
-  if (nh.getParam("imuHistorySize", iParam)) {
-    if (iParam < 1) {
-      ROS_ERROR("Invalid imuHistorySize parameter: %d (expected >= 1)", iParam);
-      success = false;
-    } else {
-        config_out.imuHistorySize = iParam;
-      ROS_INFO("Set imuHistorySize: %d", iParam);
+    if (nh.getParam("imuHistorySize", intVal)) {
+        if (intVal < 1) {
+            ROS_ERROR("Invalid imuHistorySize: %d (expected >= 1)", intVal);
+            return false;
+        } else {
+            configOut.imuHistorySize = intVal;
+            ROS_INFO("Set imuHistorySize: %d", intVal);
+        }
     }
-  }
 
-  if (nh.getParam("featureRegions", iParam)) {
-    if (iParam < 1) {
-      ROS_ERROR("Invalid featureRegions parameter: %d (expected >= 1)", iParam);
-      success = false;
-    } else {
-        config_out.nFeatureRegions = iParam;
-      ROS_INFO("Set nFeatureRegions: %d", iParam);
+    if (nh.getParam("featureRegions", intVal)) {
+        if (intVal < 1) {
+            ROS_ERROR("Invalid featureRegions: %d (expected >= 1)", intVal);
+            return false;
+        } else {
+            configOut.nFeatureRegions = intVal;
+            ROS_INFO("Set nFeatureRegions: %d", intVal);
+        }
     }
-  }
 
-  if (nh.getParam("curvatureRegion", iParam)) {
-    if (iParam < 1) {
-      ROS_ERROR("Invalid curvatureRegion parameter: %d (expected >= 1)", iParam);
-      success = false;
-    } else {
-        config_out.curvatureRegion = iParam;
-      ROS_INFO("Set curvatureRegion: +/- %d", iParam);
+    if (nh.getParam("curvatureRegion", intVal)) {
+        if (intVal < 1) {
+            ROS_ERROR("Invalid curvatureRegion: %d (expected >= 1)", intVal);
+            return false;
+        } else {
+            configOut.curvatureRegion = intVal;
+            ROS_INFO("Set curvatureRegion: +/- %d", intVal);
+        }
     }
-  }
 
-  if (nh.getParam("maxCornerSharp", iParam)) {
-    if (iParam < 1) {
-      ROS_ERROR("Invalid maxCornerSharp parameter: %d (expected >= 1)", iParam);
-      success = false;
-    } else {
-        config_out.maxCornerSharp = iParam;
-        config_out.maxCornerLessSharp = 10 * iParam;
-      ROS_INFO("Set maxCornerSharp / less sharp: %d / %d", iParam, config_out.maxCornerLessSharp);
+    if (nh.getParam("maxCornerSharp", intVal)) {
+        if (intVal < 1) {
+            ROS_ERROR("Invalid maxCornerSharp: %d (expected >= 1)", intVal);
+            return false;
+        } else {
+            configOut.maxCornerSharp = intVal;
+            configOut.maxCornerLessSharp = 10 * intVal;
+            ROS_INFO("Set maxCornerSharp / less sharp: %d / %d",
+                     intVal, configOut.maxCornerLessSharp);
+        }
     }
-  }
 
-  if (nh.getParam("maxCornerLessSharp", iParam)) {
-    if (iParam < config_out.maxCornerSharp) {
-      ROS_ERROR("Invalid maxCornerLessSharp parameter: %d (expected >= %d)", iParam, config_out.maxCornerSharp);
-      success = false;
-    } else {
-        config_out.maxCornerLessSharp = iParam;
-      ROS_INFO("Set maxCornerLessSharp: %d", iParam);
+    if (nh.getParam("maxCornerLessSharp", intVal)) {
+        if (intVal < configOut.maxCornerSharp) {
+            ROS_ERROR("Invalid maxCornerLessSharp: %d (expected >= %d)",
+                      intVal, configOut.maxCornerSharp);
+            return false;
+        } else {
+            configOut.maxCornerLessSharp = intVal;
+            ROS_INFO("Set maxCornerLessSharp: %d", intVal);
+        }
     }
-  }
 
-  if (nh.getParam("maxSurfaceFlat", iParam)) {
-    if (iParam < 1) {
-      ROS_ERROR("Invalid maxSurfaceFlat parameter: %d (expected >= 1)", iParam);
-      success = false;
-    } else {
-        config_out.maxSurfaceFlat = iParam;
-      ROS_INFO("Set maxSurfaceFlat: %d", iParam);
+    if (nh.getParam("maxSurfaceFlat", intVal)) {
+        if (intVal < 1) {
+            ROS_ERROR("Invalid maxSurfaceFlat: %d (expected >= 1)", intVal);
+            return false;
+        } else {
+            configOut.maxSurfaceFlat = intVal;
+            ROS_INFO("Set maxSurfaceFlat: %d", intVal);
+        }
     }
-  }
 
-  if (nh.getParam("surfaceCurvatureThreshold", fParam)) {
-    if (fParam < 0.001) {
-      ROS_ERROR("Invalid surfaceCurvatureThreshold parameter: %f (expected >= 0.001)", fParam);
-      success = false;
-    } else {
-        config_out.surfaceCurvatureThreshold = fParam;
-      ROS_INFO("Set surfaceCurvatureThreshold: %g", fParam);
+    if (nh.getParam("surfaceCurvatureThreshold", floatVal)) {
+        if (floatVal < 0.001) {
+            ROS_ERROR("Invalid surfaceCurvatureThreshold: "
+                      "%f (expected >= 0.001)", floatVal);
+            return false;
+        } else {
+            configOut.surfaceCurvatureThreshold = floatVal;
+            ROS_INFO("Set surfaceCurvatureThreshold: %g", floatVal);
+        }
     }
-  }
 
-  if (nh.getParam("lessFlatFilterSize", fParam)) {
-    if (fParam < 0.001) {
-      ROS_ERROR("Invalid lessFlatFilterSize parameter: %f (expected >= 0.001)", fParam);
-      success = false;
-    } else {
-        config_out.lessFlatFilterSize = fParam;
-      ROS_INFO("Set lessFlatFilterSize: %g", fParam);
+    if (nh.getParam("lessFlatFilterSize", floatVal)) {
+        if (floatVal < 0.001) {
+            ROS_ERROR("Invalid lessFlatFilterSize: "
+                      "%f (expected >= 0.001)", floatVal);
+            return false;
+        } else {
+            configOut.lessFlatFilterSize = floatVal;
+            ROS_INFO("Set lessFlatFilterSize: %g", floatVal);
+        }
     }
-  }
 
-  return success;
+    return true;
 }
 
-bool ScanRegistration::setupROS(ros::NodeHandle& node, ros::NodeHandle& privateNode, RegistrationParams& config_out)
+bool ScanRegistration::setupROS(
+    ros::NodeHandle& node, ros::NodeHandle& privateNode,
+    RegistrationParams& configOut)
 {
-  if (!parseParams(privateNode, config_out))
-    return false;
+    if (!this->parseParams(privateNode, configOut))
+        return false;
 
-  // subscribe to IMU topic
-  _subImu = node.subscribe<sensor_msgs::Imu>("/imu/data", 50, &ScanRegistration::handleIMUMessage, this);
+    // Subscribe IMU topic
+    this->_subImu = node.subscribe<sensor_msgs::Imu>(
+        "/imu/data", 50, &ScanRegistration::handleIMUMessage, this);
 
-  // advertise scan registration topics
-  _pubLaserCloud            = node.advertise<sensor_msgs::PointCloud2>("/velodyne_cloud_2", 2);
-  _pubCornerPointsSharp     = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_sharp", 2);
-  _pubCornerPointsLessSharp = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_sharp", 2);
-  _pubSurfPointsFlat        = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_flat", 2);
-  _pubSurfPointsLessFlat    = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_flat", 2);
-  _pubImuTrans              = node.advertise<sensor_msgs::PointCloud2>("/imu_trans", 5);
+    // Advertise scan registration topics
+    this->_pubLaserCloud = node.advertise<sensor_msgs::PointCloud2>(
+        "/velodyne_cloud_2", 2);
+    this->_pubCornerPointsSharp = node.advertise<sensor_msgs::PointCloud2>(
+        "/laser_cloud_sharp", 2);
+    this->_pubCornerPointsLessSharp = node.advertise<sensor_msgs::PointCloud2>(
+        "/laser_cloud_less_sharp", 2);
+    this->_pubSurfPointsFlat = node.advertise<sensor_msgs::PointCloud2>(
+        "/laser_cloud_flat", 2);
+    this->_pubSurfPointsLessFlat = node.advertise<sensor_msgs::PointCloud2>(
+        "/laser_cloud_less_flat", 2);
+    this->_pubImuTrans = node.advertise<sensor_msgs::PointCloud2>(
+        "/imu_trans", 5);
 
-  return true;
+    return true;
 }
-
-
 
 void ScanRegistration::handleIMUMessage(const sensor_msgs::Imu::ConstPtr& imuIn)
 {
-  tf::Quaternion orientation;
-  tf::quaternionMsgToTF(imuIn->orientation, orientation);
-  double roll, pitch, yaw;
-  tf::Matrix3x3(orientation).getRPY(roll, pitch, yaw);
+    tf::Quaternion orientation;
+    tf::quaternionMsgToTF(imuIn->orientation, orientation);
 
-  Vector3 acc;
-  acc.x() = float(imuIn->linear_acceleration.y - sin(roll) * cos(pitch) * 9.81);
-  acc.y() = float(imuIn->linear_acceleration.z - cos(roll) * cos(pitch) * 9.81);
-  acc.z() = float(imuIn->linear_acceleration.x + sin(pitch)             * 9.81);
+    double roll;
+    double pitch;
+    double yaw;
+    tf::Matrix3x3(orientation).getRPY(roll, pitch, yaw);
 
-  IMUState newState;
-  newState.stamp = fromROSTime( imuIn->header.stamp);
-  newState.roll = roll;
-  newState.pitch = pitch;
-  newState.yaw = yaw;
-  newState.acceleration = acc;
+    // Consider the acceleration from gravity
+    // Convert the gravity vector (0, 0, -9.81) in the world coordinate frame
+    // to the IMU coordinate frame and swap the axes, as (x, y, z) axes in LOAM
+    // corresponds to (y, z, x) axes in ROS coordinate systems
+    Vector3 acc;
+    acc.x() = static_cast<float>(imuIn->linear_acceleration.y
+                                 - std::sin(roll) * std::cos(pitch) * 9.81);
+    acc.y() = static_cast<float>(imuIn->linear_acceleration.z
+                                 - std::cos(roll) * std::cos(pitch) * 9.81);
+    acc.z() = static_cast<float>(imuIn->linear_acceleration.x
+                                 + std::sin(pitch) * 9.81);
 
-  updateIMUData(acc, newState);
+    IMUState newState;
+    newState.stamp = fromROSTime(imuIn->header.stamp);
+    newState.roll = roll;
+    newState.pitch = pitch;
+    newState.yaw = yaw;
+    newState.acceleration = acc;
+
+    this->updateIMUData(acc, newState);
 }
-
 
 void ScanRegistration::publishResult()
 {
-  auto sweepStartTime = toROSTime(sweepStart());
-  // publish full resolution and feature point clouds
-  publishCloudMsg(_pubLaserCloud, laserCloud(), sweepStartTime, "/camera");
-  publishCloudMsg(_pubCornerPointsSharp, cornerPointsSharp(), sweepStartTime, "/camera");
-  publishCloudMsg(_pubCornerPointsLessSharp, cornerPointsLessSharp(), sweepStartTime, "/camera");
-  publishCloudMsg(_pubSurfPointsFlat, surfacePointsFlat(), sweepStartTime, "/camera");
-  publishCloudMsg(_pubSurfPointsLessFlat, surfacePointsLessFlat(), sweepStartTime, "/camera");
+    const auto sweepStartTime = toROSTime(this->sweepStart());
 
-  // publish corresponding IMU transformation information
-  publishCloudMsg(_pubImuTrans, imuTransform(), sweepStartTime, "/camera");
+    // Publish full resolution and feature point clouds
+    publishCloudMsg(this->_pubLaserCloud,
+                    this->laserCloud(), sweepStartTime, "/camera");
+    publishCloudMsg(this->_pubCornerPointsSharp,
+                    this->cornerPointsSharp(), sweepStartTime, "/camera");
+    publishCloudMsg(this->_pubCornerPointsLessSharp,
+                    this->cornerPointsLessSharp(), sweepStartTime, "/camera");
+    publishCloudMsg(this->_pubSurfPointsFlat,
+                    this->surfacePointsFlat(), sweepStartTime, "/camera");
+    publishCloudMsg(this->_pubSurfPointsLessFlat,
+                    this->surfacePointsLessFlat(), sweepStartTime, "/camera");
+
+    // Publish corresponding IMU transformation information
+    publishCloudMsg(this->_pubImuTrans,
+                    this->imuTransform(), sweepStartTime, "/camera");
 }
 
-} // end namespace loam
+} // namespace loam
