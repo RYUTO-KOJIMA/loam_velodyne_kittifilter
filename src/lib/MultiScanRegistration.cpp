@@ -1,3 +1,6 @@
+
+// MultiScanRegistration.cpp
+
 // Copyright 2013, Ji Zhang, Carnegie Mellon University
 // Further contributions copyright (c) 2016, Southwest Research Institute
 // All rights reserved.
@@ -35,40 +38,27 @@
 
 #include <pcl_conversions/pcl_conversions.h>
 
-
 namespace loam {
 
-MultiScanMapper::MultiScanMapper(const float& lowerBound,
-                                 const float& upperBound,
-                                 const uint16_t& nScanRings)
-    : _lowerBound(lowerBound),
-      _upperBound(upperBound),
-      _nScanRings(nScanRings),
-      _factor((nScanRings - 1) / (upperBound - lowerBound))
+MultiScanMapper::MultiScanMapper(const float lowerBound,
+                                 const float upperBound,
+                                 const std::uint16_t nScanRings) :
+    _lowerBound(lowerBound),
+    _upperBound(upperBound),
+    _nScanRings(nScanRings),
+    _factor((nScanRings - 1) / (upperBound - lowerBound))
 {
-
 }
 
-void MultiScanMapper::set(const float &lowerBound,
-                          const float &upperBound,
-                          const uint16_t &nScanRings)
+void MultiScanMapper::set(const float lowerBound,
+                          const float upperBound,
+                          const std::uint16_t nScanRings)
 {
-  _lowerBound = lowerBound;
-  _upperBound = upperBound;
-  _nScanRings = nScanRings;
-  _factor = (nScanRings - 1) / (upperBound - lowerBound);
+    this->_lowerBound = lowerBound;
+    this->_upperBound = upperBound;
+    this->_nScanRings = nScanRings;
+    this->_factor = (nScanRings - 1) / (upperBound - lowerBound);
 }
-
-
-
-int MultiScanMapper::getRingForAngle(const float& angle) {
-  return int(((angle * 180 / M_PI) - _lowerBound) * _factor + 0.5);
-}
-
-
-
-
-
 
 MultiScanRegistration::MultiScanRegistration(const MultiScanMapper& scanMapper)
     : _scanMapper(scanMapper)
@@ -237,4 +227,4 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZ>& laserC
   publishResult();
 }
 
-} // end namespace loam
+} // namespace loam
