@@ -1,3 +1,6 @@
+
+// BasicScanRegistration.h
+
 #pragma once
 
 #include <utility>
@@ -10,127 +13,115 @@
 #include "Vector3.h"
 #include "CircularBuffer.h"
 
-namespace loam
+namespace loam {
+
+/** \brief A pair describing the start end end index of a range. */
+using IndexRange = std::pair<std::size_t, std::size_t>;
+
+/* Point label options. */
+enum PointLabel
 {
+    // Sharp corner point
+    CORNER_SHARP = 2,
+    // Less sharp corner point
+    CORNER_LESS_SHARP = 1,
+    // Less flat surface point
+    SURFACE_LESS_FLAT = 0,
+    // Flat surface point
+    SURFACE_FLAT = -1
+};
 
+/* Scan Registration configuration parameters. */
+struct RegistrationParams
+{
+    RegistrationParams(const float scanPeriod_ = 0.1,
+                       const int imuHistorySize_ = 200,
+                       const int nFeatureRegions_ = 6,
+                       const int curvatureRegion_ = 5,
+                       const int maxCornerSharp_ = 2,
+                       const int maxSurfaceFlat_ = 4,
+                       const float lessFlatFilterSize_ = 0.2,
+                       const float surfaceCurvatureThreshold_ = 0.1) :
+        scanPeriod(scanPeriod_),
+        imuHistorySize(imuHistorySize_),
+        nFeatureRegions(nFeatureRegions_),
+        curvatureRegion(curvatureRegion_),
+        maxCornerSharp(maxCornerSharp_),
+        maxCornerLessSharp(10 * maxCornerSharp_),
+        maxSurfaceFlat(maxSurfaceFlat_),
+        lessFlatFilterSize(lessFlatFilterSize_),
+        surfaceCurvatureThreshold(surfaceCurvatureThreshold_) { }
 
-
-  /** \brief A pair describing the start end end index of a range. */
-  typedef std::pair<size_t, size_t> IndexRange;
-
-
-
-  /** Point label options. */
-  enum PointLabel
-  {
-    CORNER_SHARP = 2,       ///< sharp corner point
-    CORNER_LESS_SHARP = 1,  ///< less sharp corner point
-    SURFACE_LESS_FLAT = 0,  ///< less flat surface point
-    SURFACE_FLAT = -1       ///< flat surface point
-  };
-
-
-  /** Scan Registration configuration parameters. */
-  class RegistrationParams
-  {
-  public:
-    RegistrationParams(const float& scanPeriod_ = 0.1,
-      const int& imuHistorySize_ = 200,
-      const int& nFeatureRegions_ = 6,
-      const int& curvatureRegion_ = 5,
-      const int& maxCornerSharp_ = 2,
-      const int& maxSurfaceFlat_ = 4,
-      const float& lessFlatFilterSize_ = 0.2,
-      const float& surfaceCurvatureThreshold_ = 0.1);
-
-    /** The time per scan. */
+    /* The time per scan. */
     float scanPeriod;
-
-    /** The size of the IMU history state buffer. */
-    int imuHistorySize;
-
-    /** The number of (equally sized) regions used to distribute the feature extraction within a scan. */
-    int nFeatureRegions;
-
-    /** The number of surrounding points (+/- region around a point) used to calculate a point curvature. */
-    int curvatureRegion;
-
-    /** The maximum number of sharp corner points per feature region. */
-    int maxCornerSharp;
-
-    /** The maximum number of less sharp corner points per feature region. */
-    int maxCornerLessSharp;
-
-    /** The maximum number of flat surface points per feature region. */
-    int maxSurfaceFlat;
-
-    /** The voxel size used for down sizing the remaining less flat surface points. */
+    /* The size of the IMU history state buffer. */
+    int   imuHistorySize;
+    /* The number of (equally sized) regions used to distribute
+     * the feature extraction within a scan. */
+    int   nFeatureRegions;
+    /* The number of surrounding points (+/- region around a point)
+     * used to calculate a point curvature. */
+    int   curvatureRegion;
+    /* The maximum number of sharp corner points per feature region. */
+    int   maxCornerSharp;
+    /* The maximum number of less sharp corner points per feature region. */
+    int   maxCornerLessSharp;
+    /* The maximum number of flat surface points per feature region. */
+    int   maxSurfaceFlat;
+    /* The voxel size used for down sizing the remaining
+     * less flat surface points. */
     float lessFlatFilterSize;
-
-    /** The curvature threshold below / above a point is considered a flat / corner point. */
+    /* The curvature threshold below / above a point is considered
+     * a flat / corner point. */
     float surfaceCurvatureThreshold;
-  };
+};
 
-
-
-  /** IMU state data. */
-  typedef struct IMUState
-  {
-    /** The time of the measurement leading to this state (in seconds). */
-    Time stamp;
-
-    /** The current roll angle. */
-    Angle roll;
-
-    /** The current pitch angle. */
-    Angle pitch;
-
-    /** The current yaw angle. */
-    Angle yaw;
-
-    /** The accumulated global IMU position in 3D space. */
+/* IMU state data. */
+struct IMUState
+{
+    /* The time of the measurement leading to this state (in seconds). */
+    Time    stamp;
+    /* The current roll angle. */
+    Angle   roll;
+    /* The current pitch angle. */
+    Angle   pitch;
+    /* The current yaw angle. */
+    Angle   yaw;
+    /* The accumulated global IMU position in 3D space. */
     Vector3 position;
-
-    /** The accumulated global IMU velocity in 3D space. */
+    /* The accumulated global IMU velocity in 3D space. */
     Vector3 velocity;
-
-    /** The current (local) IMU acceleration in 3D space. */
+    /* The current (local) IMU acceleration in 3D space. */
     Vector3 acceleration;
 
     /** \brief Interpolate between two IMU states.
-    *
-    * @param start the first IMUState
-    * @param end the second IMUState
-    * @param ratio the interpolation ratio
-    * @param result the target IMUState for storing the interpolation result
-    */
-    static void interpolate(const IMUState& start,
-      const IMUState& end,
-      const float& ratio,
-      IMUState& result)
+     *
+     * @param start The first IMUState
+     * @param end The second IMUState
+     * @param ratio The interpolation ratio
+     * @param result The target for storing the interpolation result
+     */
+    static void interpolate(const IMUState& start, const IMUState& end,
+                            const float& ratio, IMUState& result)
     {
-      float invRatio = 1 - ratio;
+        const float invRatio = 1.0f - ratio;
 
-      result.roll = start.roll.rad() * invRatio + end.roll.rad() * ratio;
-      result.pitch = start.pitch.rad() * invRatio + end.pitch.rad() * ratio;
-      if (start.yaw.rad() - end.yaw.rad() > M_PI)
-      {
-        result.yaw = start.yaw.rad() * invRatio + (end.yaw.rad() + 2 * M_PI) * ratio;
-      }
-      else if (start.yaw.rad() - end.yaw.rad() < -M_PI)
-      {
-        result.yaw = start.yaw.rad() * invRatio + (end.yaw.rad() - 2 * M_PI) * ratio;
-      }
-      else
-      {
-        result.yaw = start.yaw.rad() * invRatio + end.yaw.rad() * ratio;
-      }
+        result.roll = start.roll.rad() * invRatio + end.roll.rad() * ratio;
+        result.pitch = start.pitch.rad() * invRatio + end.pitch.rad() * ratio;
 
-      result.velocity = start.velocity * invRatio + end.velocity * ratio;
-      result.position = start.position * invRatio + end.position * ratio;
-    };
-  } IMUState;
+        if (start.yaw.rad() - end.yaw.rad() > M_PI)
+            result.yaw = start.yaw.rad() * invRatio
+                         + (end.yaw.rad() + 2.0f * M_PI) * ratio;
+        else if (start.yaw.rad() - end.yaw.rad() < -M_PI)
+            result.yaw = start.yaw.rad() * invRatio
+                         + (end.yaw.rad() - 2.0f * M_PI) * ratio;
+        else
+            result.yaw = start.yaw.rad() * invRatio + end.yaw.rad() * ratio;
 
+        result.velocity = start.velocity * invRatio + end.velocity * ratio;
+        result.position = start.position * invRatio + end.position * ratio;
+    }
+};
 
   class BasicScanRegistration
   {
@@ -255,5 +246,4 @@ namespace loam
     std::vector<int> _scanNeighborPicked;     ///< flag if neighboring point was already picked
   };
 
-}
-
+} // namespace loam

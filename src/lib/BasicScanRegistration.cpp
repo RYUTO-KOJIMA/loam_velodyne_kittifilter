@@ -6,25 +6,6 @@
 namespace loam
 {
 
-RegistrationParams::RegistrationParams(const float& scanPeriod_,
-                                       const int& imuHistorySize_,
-                                       const int& nFeatureRegions_,
-                                       const int& curvatureRegion_,
-                                       const int& maxCornerSharp_,
-                                       const int& maxSurfaceFlat_,
-                                       const float& lessFlatFilterSize_,
-                                       const float& surfaceCurvatureThreshold_)
-    : scanPeriod(scanPeriod_),
-      imuHistorySize(imuHistorySize_),
-      nFeatureRegions(nFeatureRegions_),
-      curvatureRegion(curvatureRegion_),
-      maxCornerSharp(maxCornerSharp_),
-      maxCornerLessSharp(10 * maxCornerSharp_),
-      maxSurfaceFlat(maxSurfaceFlat_),
-      lessFlatFilterSize(lessFlatFilterSize_),
-      surfaceCurvatureThreshold(surfaceCurvatureThreshold_)
-{};
-
 void BasicScanRegistration::processScanlines(const Time& scanTime, std::vector<pcl::PointCloud<pcl::PointXYZI>> const& laserCloudScans)
 {
   // reset internal buffers and set IMU start state based on current scan time
