@@ -1,31 +1,28 @@
+
+// Twist.h
+
 #ifndef LOAM_TWIST_H
 #define LOAM_TWIST_H
-
 
 #include "Angle.h"
 #include "Vector3.h"
 
-
 namespace loam {
-
 
 /** \brief Twist composed by three angles and a three-dimensional position.
  *
  */
-class Twist {
+class Twist
+{
 public:
-  Twist()
-        : rot_x(),
-          rot_y(),
-          rot_z(),
-          pos() {};
+    Twist() = default;
 
-  Angle rot_x;
-  Angle rot_y;
-  Angle rot_z;
-  Vector3 pos;
+    Angle   rot_x;
+    Angle   rot_y;
+    Angle   rot_z;
+    Vector3 pos;
 };
 
-} // end namespace loam
+} // namespace loam
 
-#endif //LOAM_TWIST_H
+#endif // LOAM_TWIST_H
