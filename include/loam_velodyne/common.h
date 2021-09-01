@@ -36,14 +36,16 @@
 #ifndef LOAM_COMMON_H
 #define LOAM_COMMON_H
 
+#include <chrono>
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_types.h>
 
-#include "time_utils.h"
-
 namespace loam {
+
+/** \brief A standard non-ROS alternative to ros::Time. */
+using Time = std::chrono::system_clock::time_point;
 
 /** \brief Construct a new point cloud message from the specified information
  * and publish it via the given publisher.
@@ -65,6 +67,11 @@ inline void publishCloudMsg(ros::Publisher& publisher,
     msg.header.stamp = stamp;
     msg.header.frame_id = frameId;
     publisher.publish(msg);
+}
+
+inline double toSec(Time::duration duration)
+{
+    return std::chrono::duration<double>(duration).count();
 }
 
 inline Time fromROSTime(const ros::Time& rosTime)
