@@ -1,3 +1,6 @@
+
+// common.h
+
 // Copyright 2013, Ji Zhang, Carnegie Mellon University
 // Further contributions copyright (c) 2016, Southwest Research Institute
 // All rights reserved.
@@ -37,44 +40,48 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_types.h>
+
 #include "time_utils.h"
 
 namespace loam {
 
-/** \brief Construct a new point cloud message from the specified information and publish it via the given publisher.
+/** \brief Construct a new point cloud message from the specified information
+ * and publish it via the given publisher.
  *
- * @tparam PointT the point type
- * @param publisher the publisher instance
- * @param cloud the cloud to publish
- * @param stamp the time stamp of the cloud message
- * @param frameID the message frame ID
+ * @tparam PointT The point type
+ * @param publisher The publisher instance
+ * @param cloud The cloud to publish
+ * @param stamp The time stamp of the cloud message
+ * @param frameId The message frame ID
  */
 template <typename PointT>
 inline void publishCloudMsg(ros::Publisher& publisher,
                             const pcl::PointCloud<PointT>& cloud,
                             const ros::Time& stamp,
-                            std::string frameID) {
-  sensor_msgs::PointCloud2 msg;
-  pcl::toROSMsg(cloud, msg);
-  msg.header.stamp = stamp;
-  msg.header.frame_id = frameID;
-  publisher.publish(msg);
-}
-
-
-// ROS time adapters
-inline Time fromROSTime(ros::Time const& rosTime)
+                            const std::string& frameId)
 {
-  auto epoch = std::chrono::system_clock::time_point();
-  auto since_epoch = std::chrono::seconds(rosTime.sec) + std::chrono::nanoseconds(rosTime.nsec);
-  return epoch + since_epoch;
+    sensor_msgs::PointCloud2 msg;
+    pcl::toROSMsg(cloud, msg);
+    msg.header.stamp = stamp;
+    msg.header.frame_id = frameId;
+    publisher.publish(msg);
 }
 
-inline ros::Time toROSTime(Time const& time_point)
+inline Time fromROSTime(const ros::Time& rosTime)
 {
-  return ros::Time().fromNSec(std::chrono::duration_cast<std::chrono::nanoseconds>(time_point.time_since_epoch()).count());
+    const auto epoch = std::chrono::system_clock::time_point();
+    const auto sinceEpoch = std::chrono::seconds(rosTime.sec)
+                            + std::chrono::nanoseconds(rosTime.nsec);
+    return epoch + sinceEpoch;
 }
 
-} // end namespace loam
+inline ros::Time toROSTime(const Time& timePoint)
+{
+    const auto nanoSeconds = std::chrono::duration_cast<
+        std::chrono::nanoseconds>(timePoint.time_since_epoch()).count();
+    return ros::Time().fromNSec(nanoSeconds);
+}
+
+} // namespace loam
 
 #endif // LOAM_COMMON_H
