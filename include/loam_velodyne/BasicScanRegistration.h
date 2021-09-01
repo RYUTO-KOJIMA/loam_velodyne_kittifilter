@@ -123,127 +123,161 @@ struct IMUState
     }
 };
 
-  class BasicScanRegistration
-  {
-  public:
+class BasicScanRegistration
+{
+public:
     /** \brief Process a new cloud as a set of scanlines.
-    *
-    * @param relTime the time relative to the scan time
-    */
-    void processScanlines(const Time& scanTime, std::vector<pcl::PointCloud<pcl::PointXYZI>> const& laserCloudScans);
+     *
+     * @param relTime The time relative to the scan time
+     */
+    void processScanlines(
+        const Time& scanTime,
+        const std::vector<pcl::PointCloud<pcl::PointXYZI>>& laserCloudScans);
 
     bool configure(const RegistrationParams& config = RegistrationParams()); 
 
-    /** \brief Update new IMU state. NOTE: MUTATES ARGS! */
+    /** \brief Update new IMU state (also mutates the arguments). */
     void updateIMUData(Vector3& acc, IMUState& newState);
 
-    /** \brief Project a point to the start of the sweep using corresponding IMU data
-    *
-    * @param point The point to modify
-    * @param relTime The time to project by
-    */
+    /** \brief Project a point to the start of the sweep
+     * using corresponding IMU data.
+     *
+     * @param point The point to modify
+     * @param relTime The time to project by
+     */
     void projectPointToStartOfSweep(pcl::PointXYZI& point, float relTime);
 
-    auto const& imuTransform          () { return _imuTrans             ; }
-    auto const& sweepStart            () { return _sweepStart           ; }
-    auto const& laserCloud            () { return _laserCloud           ; }
-    auto const& cornerPointsSharp     () { return _cornerPointsSharp    ; }
-    auto const& cornerPointsLessSharp () { return _cornerPointsLessSharp; }
-    auto const& surfacePointsFlat     () { return _surfacePointsFlat    ; }
-    auto const& surfacePointsLessFlat () { return _surfacePointsLessFlat; }
-    auto const& config                () { return _config               ; }
+    inline const auto& config() const { return this->_config; }
+    inline const auto& imuTransform() const { return this->_imuTrans; }
+    inline const auto& sweepStart() const { return this->_sweepStart; }
 
-  private:
+    inline const auto& laserCloud() const
+    { return this->_laserCloud; }
+    inline const auto& cornerPointsSharp() const
+    { return this->_cornerPointsSharp; }
+    inline const auto& cornerPointsLessSharp() const
+    { return this->_cornerPointsLessSharp; }
+    inline const auto& surfacePointsFlat() const
+    { return this->_surfacePointsFlat; }
+    inline const auto& surfacePointsLessFlat() const
+    { return this->_surfacePointsLessFlat; }
 
+private:
     /** \brief Check is IMU data is available. */
-    inline bool hasIMUData() { return _imuHistory.size() > 0; };
+    inline bool hasIMUData() { return !this->_imuHistory.empty(); }
 
-    /** \brief Set up the current IMU transformation for the specified relative time.
+    /** \brief Set up the current IMU transformation
+     * for the specified relative time.
      *
-     * @param relTime the time relative to the scan time
+     * @param relTime The time relative to the scan time
      */
-    void setIMUTransformFor(const float& relTime);
+    void setIMUTransformFor(const float relTime);
 
-    /** \brief Project the given point to the start of the sweep, using the current IMU state and position shift.
+    /** \brief Project the given point to the start of the sweep,
+     * using the current IMU state and position shift.
      *
-     * @param point the point to project
+     * @param point The point to project
      */
     void transformToStartIMU(pcl::PointXYZI& point);
 
     /** \brief Prepare for next scan / sweep.
      *
-     * @param scanTime the current scan time
-     * @param newSweep indicator if a new sweep has started
+     * @param scanTime The current scan time
+     * @param newSweep Indicator if a new sweep has started
      */
     void reset(const Time& scanTime);
 
     /** \brief Extract features from current laser cloud.
      *
-     * @param beginIdx the index of the first scan to extract features from
+     * @param beginIdx The index of the first scan to extract features from
      */
-    void extractFeatures(const uint16_t& beginIdx = 0);
+    void extractFeatures(const std::uint16_t beginIdx = 0);
 
     /** \brief Set up region buffers for the specified point range.
      *
-     * @param startIdx the region start index
-     * @param endIdx the region end index
+     * @param startIdx The region start index
+     * @param endIdx The region end index
      */
-    void setRegionBuffersFor(const size_t& startIdx,
-      const size_t& endIdx);
+    void setRegionBuffersFor(const std::size_t& startIdx,
+                             const std::size_t& endIdx);
 
     /** \brief Set up scan buffers for the specified point range.
      *
-     * @param startIdx the scan start index
-     * @param endIdx the scan start index
+     * @param startIdx The scan start index
+     * @param endIdx The scan end index
      */
-    void setScanBuffersFor(const size_t& startIdx,
-      const size_t& endIdx);
+    void setScanBuffersFor(const std::size_t& startIdx,
+                           const std::size_t& endIdx);
 
     /** \brief Mark a point and its neighbors as picked.
      *
-     * This method will mark neighboring points within the curvature region as picked,
-     * as long as they remain within close distance to each other.
+     * This method will mark neighboring points within the curvature region
+     * as picked, as long as they remain within close distance to each other.
      *
-     * @param cloudIdx the index of the picked point in the full resolution cloud
-     * @param scanIdx the index of the picked point relative to the current scan
+     * @param cloudIdx The index of the picked point in the
+     * full resolution cloud
+     * @param scanIdx The index of the picked point relative to the current scan
      */
-    void markAsPicked(const size_t& cloudIdx,
-      const size_t& scanIdx);
+    void markAsPicked(const std::size_t& cloudIdx,
+                      const std::size_t& scanIdx);
 
     /** \brief Try to interpolate the IMU state for the given time.
      *
-     * @param relTime the time relative to the scan time
-     * @param outputState the output state instance
+     * @param relTime The time relative to the scan time
+     * @param outputState The output state instance
      */
     void interpolateIMUStateFor(const float& relTime, IMUState& outputState);
 
     void updateIMUTransform();
 
-  private:
-    RegistrationParams _config;  ///< registration parameter
+private:
+    // Registration parameters
+    RegistrationParams _config;
 
-    pcl::PointCloud<pcl::PointXYZI> _laserCloud;   ///< full resolution input cloud
-    std::vector<IndexRange> _scanIndices;          ///< start and end indices of the individual scans withing the full resolution cloud
+    // Full resolution input cloud
+    pcl::PointCloud<pcl::PointXYZI> _laserCloud;
+    // Start and end indices of the individual scans
+    // within the full resolution cloud
+    std::vector<IndexRange> _scanIndices;
 
-    pcl::PointCloud<pcl::PointXYZI> _cornerPointsSharp;      ///< sharp corner points cloud
-    pcl::PointCloud<pcl::PointXYZI> _cornerPointsLessSharp;  ///< less sharp corner points cloud
-    pcl::PointCloud<pcl::PointXYZI> _surfacePointsFlat;      ///< flat surface points cloud
-    pcl::PointCloud<pcl::PointXYZI> _surfacePointsLessFlat;  ///< less flat surface points cloud
+    // Sharp corner points cloud
+    pcl::PointCloud<pcl::PointXYZI> _cornerPointsSharp;
+    // Less sharp corner points cloud
+    pcl::PointCloud<pcl::PointXYZI> _cornerPointsLessSharp;
+    // Flat surface points cloud
+    pcl::PointCloud<pcl::PointXYZI> _surfacePointsFlat;
+    // Less flat surface points cloud
+    pcl::PointCloud<pcl::PointXYZI> _surfacePointsLessFlat;
 
-    Time _sweepStart;            ///< time stamp of beginning of current sweep
-    Time _scanTime;              ///< time stamp of most recent scan
-    IMUState _imuStart;                     ///< the interpolated IMU state corresponding to the start time of the currently processed laser scan
-    IMUState _imuCur;                       ///< the interpolated IMU state corresponding to the time of the currently processed laser scan point
-    Vector3 _imuPositionShift;              ///< position shift between accumulated IMU position and interpolated IMU position
-    size_t _imuIdx = 0;                         ///< the current index in the IMU history
-    CircularBuffer<IMUState> _imuHistory;   ///< history of IMU states for cloud registration
+    // Time stamp of beginning of current sweep
+    Time _sweepStart;
+    // Time stamp of most recent scan (same as the beginning of current sweep)
+    Time _scanTime;
+    // The interpolated IMU state corresponding to the start time of
+    // the currently processed laser scan
+    IMUState _imuStart;
+    // The interpolated IMU state corresponding to the time of
+    // the currently processed laser scan point
+    IMUState _imuCur;
+    // Position shift between accumulated IMU position and interpolated IMU
+    // position caused by acceleration or deceleration, i.e., nonlinear motion
+    Vector3 _imuPositionShift;
+    // The current index in the IMU history
+    std::size_t _imuIdx = 0;
+    // History of IMU states for cloud registration
+    CircularBuffer<IMUState> _imuHistory;
 
-    pcl::PointCloud<pcl::PointXYZ> _imuTrans = { 4,1 };  ///< IMU transformation information
+    // IMU transformation information (contains 4 transformations)
+    pcl::PointCloud<pcl::PointXYZ> _imuTrans = { 4, 1 };
 
-    std::vector<float> _regionCurvature;      ///< point curvature buffer
-    std::vector<PointLabel> _regionLabel;     ///< point label buffer
-    std::vector<size_t> _regionSortIndices;   ///< sorted region indices based on point curvature
-    std::vector<int> _scanNeighborPicked;     ///< flag if neighboring point was already picked
-  };
+    // Point curvature buffer
+    std::vector<float> _regionCurvature;
+    // Point label buffer
+    std::vector<PointLabel> _regionLabel;
+    // Sorted region indices based on point curvature
+    std::vector<std::size_t> _regionSortIndices;
+    // Flag if neighboring point was already picked
+    std::vector<int> _scanNeighborPicked;
+};
 
 } // namespace loam
