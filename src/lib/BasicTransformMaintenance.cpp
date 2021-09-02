@@ -33,15 +33,11 @@
 //   J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time.
 //     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
 
-#include <cmath>
 #include "loam_velodyne/BasicTransformMaintenance.h"
+#include "loam_velodyne/Transform.hpp"
 
 namespace loam {
 
-using std::sin;
-using std::cos;
-using std::asin;
-using std::atan2;
 void BasicTransformMaintenance::updateOdometry(
    double pitch, double yaw, double roll,
    double x, double y, double z)
@@ -89,101 +85,63 @@ void BasicTransformMaintenance::updateMappingTransform(
         transformBefMapped.pos.z());
 }
 
+// Combine the results from odometry and mapping
 void BasicTransformMaintenance::transformAssociateToMap()
 {
-   float x1 = cos(_transformSum[1]) * (_transformBefMapped[3] - _transformSum[3])
-      - sin(_transformSum[1]) * (_transformBefMapped[5] - _transformSum[5]);
-   float y1 = _transformBefMapped[4] - _transformSum[4];
-   float z1 = sin(_transformSum[1]) * (_transformBefMapped[3] - _transformSum[3])
-      + cos(_transformSum[1]) * (_transformBefMapped[5] - _transformSum[5]);
+    // This method is basically the same as `transformAssociateToMap()` in
+    // `BasicLaserMapping`
 
-   float x2 = x1;
-   float y2 = cos(_transformSum[0]) * y1 + sin(_transformSum[0]) * z1;
-   float z2 = -sin(_transformSum[0]) * y1 + cos(_transformSum[0]) * z1;
+    // Create rotation matrices from Euler angles in `_transformSum`,
+    // `_transformBefMapped`, and `_transformAftMapped`
+    const Eigen::Matrix3f rotationMatSum = rotationMatrixZXY(
+        this->_transformSum[0], this->_transformSum[1],
+        this->_transformSum[2]);
+    const Eigen::Matrix3f rotationMatBefMapped = rotationMatrixZXY(
+        this->_transformBefMapped[0], this->_transformBefMapped[1],
+        this->_transformBefMapped[2]);
+    const Eigen::Matrix3f rotationMatAftMapped = rotationMatrixZXY(
+        this->_transformAftMapped[0], this->_transformAftMapped[1],
+        this->_transformAftMapped[2]);
 
-   _transformIncre[3] = cos(_transformSum[2]) * x2 + sin(_transformSum[2]) * y2;
-   _transformIncre[4] = -sin(_transformSum[2]) * x2 + cos(_transformSum[2]) * y2;
-   _transformIncre[5] = z2;
+    // Compute the odometry pose update in a global coordinate frame
+    const Eigen::Vector3f globalIncre {
+        this->_transformBefMapped[3] - this->_transformSum[3],
+        this->_transformBefMapped[4] - this->_transformSum[4],
+        this->_transformBefMapped[5] - this->_transformSum[5] };
+    // Compute the odometry pose update in a local odometry frame
+    const Eigen::Vector3f transformIncre =
+        rotationMatSum.transpose() * globalIncre;
 
-   float sbcx = sin(_transformSum[0]);
-   float cbcx = cos(_transformSum[0]);
-   float sbcy = sin(_transformSum[1]);
-   float cbcy = cos(_transformSum[1]);
-   float sbcz = sin(_transformSum[2]);
-   float cbcz = cos(_transformSum[2]);
+    this->_transformIncre[3] = transformIncre.x();
+    this->_transformIncre[4] = transformIncre.y();
+    this->_transformIncre[5] = transformIncre.z();
 
-   float sblx = sin(_transformBefMapped[0]);
-   float cblx = cos(_transformBefMapped[0]);
-   float sbly = sin(_transformBefMapped[1]);
-   float cbly = cos(_transformBefMapped[1]);
-   float sblz = sin(_transformBefMapped[2]);
-   float cblz = cos(_transformBefMapped[2]);
+    // Compose three rotation matrices above for `_transformMapped`
+    const Eigen::Matrix3f rotationMatMapped =
+        rotationMatAftMapped * rotationMatBefMapped.transpose()
+        * rotationMatSum;
+    // Get three Euler angles from the rotation matrix above
+    Eigen::Vector3f eulerAnglesMapped;
+    eulerAnglesFromRotationZXY(
+        rotationMatMapped, eulerAnglesMapped.x(),
+        eulerAnglesMapped.y(), eulerAnglesMapped.z());
 
-   float salx = sin(_transformAftMapped[0]);
-   float calx = cos(_transformAftMapped[0]);
-   float saly = sin(_transformAftMapped[1]);
-   float caly = cos(_transformAftMapped[1]);
-   float salz = sin(_transformAftMapped[2]);
-   float calz = cos(_transformAftMapped[2]);
+    this->_transformMapped[0] = eulerAnglesMapped.x();
+    this->_transformMapped[1] = eulerAnglesMapped.y();
+    this->_transformMapped[2] = eulerAnglesMapped.z();
 
-   float srx = -sbcx * (salx*sblx + calx * cblx*salz*sblz + calx * calz*cblx*cblz)
-      - cbcx * sbcy*(calx*calz*(cbly*sblz - cblz * sblx*sbly)
-         - calx * salz*(cbly*cblz + sblx * sbly*sblz)
-         + cblx * salx*sbly)
-      - cbcx * cbcy*(calx*salz*(cblz*sbly - cbly * sblx*sblz)
-         - calx * calz*(sbly*sblz + cbly * cblz*sblx)
-         + cblx * cbly*salx);
-   _transformMapped[0] = -asin(srx);
+    // Combine the pose from odometry and mapping
+    const Eigen::Vector3f transformAftMapped {
+        this->_transformAftMapped[3], this->_transformAftMapped[4],
+        this->_transformAftMapped[5] };
+    const Eigen::Vector3f transformMapped =
+        transformAftMapped - rotationMatMapped * transformIncre;
 
-   float srycrx = sbcx * (cblx*cblz*(caly*salz - calz * salx*saly)
-      - cblx * sblz*(caly*calz + salx * saly*salz) + calx * saly*sblx)
-      - cbcx * cbcy*((caly*calz + salx * saly*salz)*(cblz*sbly - cbly * sblx*sblz)
-         + (caly*salz - calz * salx*saly)*(sbly*sblz + cbly * cblz*sblx)
-         - calx * cblx*cbly*saly)
-      + cbcx * sbcy*((caly*calz + salx * saly*salz)*(cbly*cblz + sblx * sbly*sblz)
-         + (caly*salz - calz * salx*saly)*(cbly*sblz - cblz * sblx*sbly)
-         + calx * cblx*saly*sbly);
-   float crycrx = sbcx * (cblx*sblz*(calz*saly - caly * salx*salz)
-      - cblx * cblz*(saly*salz + caly * calz*salx) + calx * caly*sblx)
-      + cbcx * cbcy*((saly*salz + caly * calz*salx)*(sbly*sblz + cbly * cblz*sblx)
-         + (calz*saly - caly * salx*salz)*(cblz*sbly - cbly * sblx*sblz)
-         + calx * caly*cblx*cbly)
-      - cbcx * sbcy*((saly*salz + caly * calz*salx)*(cbly*sblz - cblz * sblx*sbly)
-         + (calz*saly - caly * salx*salz)*(cbly*cblz + sblx * sbly*sblz)
-         - calx * caly*cblx*sbly);
-   _transformMapped[1] = atan2(srycrx / cos(_transformMapped[0]),
-      crycrx / cos(_transformMapped[0]));
+    this->_transformMapped[3] = transformMapped.x();
+    this->_transformMapped[4] = transformMapped.y();
+    this->_transformMapped[5] = transformMapped.z();
 
-   float srzcrx = (cbcz*sbcy - cbcy * sbcx*sbcz)*(calx*salz*(cblz*sbly - cbly * sblx*sblz)
-      - calx * calz*(sbly*sblz + cbly * cblz*sblx)
-      + cblx * cbly*salx)
-      - (cbcy*cbcz + sbcx * sbcy*sbcz)*(calx*calz*(cbly*sblz - cblz * sblx*sbly)
-         - calx * salz*(cbly*cblz + sblx * sbly*sblz)
-         + cblx * salx*sbly)
-      + cbcx * sbcz*(salx*sblx + calx * cblx*salz*sblz + calx * calz*cblx*cblz);
-   float crzcrx = (cbcy*sbcz - cbcz * sbcx*sbcy)*(calx*calz*(cbly*sblz - cblz * sblx*sbly)
-      - calx * salz*(cbly*cblz + sblx * sbly*sblz)
-      + cblx * salx*sbly)
-      - (sbcy*sbcz + cbcy * cbcz*sbcx)*(calx*salz*(cblz*sbly - cbly * sblx*sblz)
-         - calx * calz*(sbly*sblz + cbly * cblz*sblx)
-         + cblx * cbly*salx)
-      + cbcx * cbcz*(salx*sblx + calx * cblx*salz*sblz + calx * calz*cblx*cblz);
-   _transformMapped[2] = atan2(srzcrx / cos(_transformMapped[0]),
-      crzcrx / cos(_transformMapped[0]));
-
-   x1 = cos(_transformMapped[2]) * _transformIncre[3] - sin(_transformMapped[2]) * _transformIncre[4];
-   y1 = sin(_transformMapped[2]) * _transformIncre[3] + cos(_transformMapped[2]) * _transformIncre[4];
-   z1 = _transformIncre[5];
-
-   x2 = x1;
-   y2 = cos(_transformMapped[0]) * y1 - sin(_transformMapped[0]) * z1;
-   z2 = sin(_transformMapped[0]) * y1 + cos(_transformMapped[0]) * z1;
-
-   _transformMapped[3] = _transformAftMapped[3]
-      - (cos(_transformMapped[1]) * x2 + sin(_transformMapped[1]) * z2);
-   _transformMapped[4] = _transformAftMapped[4] - y2;
-   _transformMapped[5] = _transformAftMapped[5]
-      - (-sin(_transformMapped[1]) * x2 + cos(_transformMapped[1]) * z2);
+    return;
 }
 
 } // namespace loam
