@@ -1,109 +1,157 @@
+
+// BasicLaserOdometry.h
+
 #pragma once
-#include "Twist.h"
-#include "nanoflann_pcl.h"
+
+#include "loam_velodyne/Twist.h"
+#include "loam_velodyne/nanoflann_pcl.h"
+
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
-namespace loam
-{
+namespace loam {
 
-  /** \brief Implementation of the LOAM laser odometry component.
-   *
-   */
-  class BasicLaserOdometry
-  {
-  public:
-    explicit BasicLaserOdometry(float scanPeriod = 0.1, size_t maxIterations = 25);
+/** \brief Implementation of the LOAM laser odometry component. */
+class BasicLaserOdometry
+{
+public:
+    BasicLaserOdometry(float scanPeriod = 0.1, std::size_t maxIterations = 25);
 
     /** \brief Try to process buffered data. */
     void process();
-    void updateIMU(pcl::PointCloud<pcl::PointXYZ> const& imuTrans);
 
-    auto& cornerPointsSharp()     { return _cornerPointsSharp; }
-    auto& cornerPointsLessSharp() { return _cornerPointsLessSharp; }
-    auto& surfPointsFlat()        { return _surfPointsFlat; }
-    auto& surfPointsLessFlat()    { return _surfPointsLessFlat; }
-    auto& laserCloud() { return _laserCloud; }
+    void updateIMU(const pcl::PointCloud<pcl::PointXYZ>& imuTrans);
 
-    auto const& transformSum() { return _transformSum; }
-    auto const& transform()    { return _transform;    }
-    auto const& lastCornerCloud () { return _lastCornerCloud ; }
-    auto const& lastSurfaceCloud() { return _lastSurfaceCloud; }
+    auto& cornerPointsSharp() { return this->_cornerPointsSharp; }
+    auto& cornerPointsLessSharp() { return this->_cornerPointsLessSharp; }
+    auto& surfPointsFlat() { return this->_surfPointsFlat; }
+    auto& surfPointsLessFlat() { return this->_surfPointsLessFlat; }
+    auto& laserCloud() { return this->_laserCloud; }
 
-    void setScanPeriod(float val)     { _scanPeriod    = val; }
-    void setMaxIterations(size_t val) { _maxIterations = val; }
-    void setDeltaTAbort(float val)    { _deltaTAbort = val;   }
-    void setDeltaRAbort(float val)    { _deltaRAbort = val;   }
+    const auto& transformSum() const { return this->_transformSum; }
+    const auto& transform() const { return this->_transform; }
+    const auto& lastCornerCloud() const { return this->_lastCornerCloud; }
+    const auto& lastSurfaceCloud() const { return this->_lastSurfaceCloud; }
 
-    auto frameCount()    const { return _frameCount;    }
-    auto scanPeriod()    const { return _scanPeriod;    }
-    auto maxIterations() const { return _maxIterations; }
-    auto deltaTAbort()   const { return _deltaTAbort;   }
-    auto deltaRAbort()   const { return _deltaRAbort;   }
+    void setScanPeriod(float val) { this->_scanPeriod = val; }
+    void setMaxIterations(std::size_t val) { this->_maxIterations = val; }
+    void setDeltaTAbort(float val) { this->_deltaTAbort = val; }
+    void setDeltaRAbort(float val) { this->_deltaRAbort = val; }
+
+    auto frameCount() const { return this->_frameCount; }
+    auto scanPeriod() const { return this->_scanPeriod; }
+    auto maxIterations() const { return this->_maxIterations; }
+    auto deltaTAbort() const { return this->_deltaTAbort; }
+    auto deltaRAbort() const { return this->_deltaRAbort; }
 
     /** \brief Transform the given point cloud to the end of the sweep.
      *
-     * @param cloud the point cloud to transform
+     * @param cloud The point cloud to transform
      */
-    size_t transformToEnd(pcl::PointCloud<pcl::PointXYZI>::Ptr& cloud);
+    std::size_t transformToEnd(pcl::PointCloud<pcl::PointXYZI>::Ptr& cloud);
 
-  private:
+private:
     /** \brief Transform the given point to the start of the sweep.
      *
-     * @param pi the point to transform
-     * @param po the point instance for storing the result
+     * @param pi The point to transform
+     * @param po The point instance for storing the result
      */
     void transformToStart(const pcl::PointXYZI& pi, pcl::PointXYZI& po);
 
-
+    // Compute three rotation matrices, R_al = Ry(aly) Rx(alx) Rz(alz),
+    // R_bl = Ry(bly) Rx(blx) Rz(blz), and R_bc = Ry(bcy) Rx(bcx) Rz(bcz)
+    // and store three Euler angles (acx, acy, acz) that correspond to the
+    // rotation matrix R = R_bc (R_bl)^T R_al
     void pluginIMURotation(const Angle& bcx, const Angle& bcy, const Angle& bcz,
                            const Angle& blx, const Angle& bly, const Angle& blz,
                            const Angle& alx, const Angle& aly, const Angle& alz,
-                           Angle &acx, Angle &acy, Angle &acz);
+                           Angle& acx, Angle& acy, Angle& acz);
 
+    // Compute two rotation matrices, R_c = Ry(cy) Rx(cx) Rz(cz) and
+    // R_l = Ry(ly) Rx(lx) Rz(lz) and store three Euler angles (ox, oy, oz)
+    // that correspond to the rotation matrix R = R_c R_l
     void accumulateRotation(Angle cx, Angle cy, Angle cz,
                             Angle lx, Angle ly, Angle lz,
-                            Angle &ox, Angle &oy, Angle &oz);
+                            Angle& ox, Angle& oy, Angle& oz);
 
-  private:
-    float _scanPeriod;       ///< time per scan
-    long _frameCount;        ///< number of processed frames
-    size_t _maxIterations;   ///< maximum number of iterations
-    bool _systemInited;      ///< initialization flag
+    // Compute the distances and coefficients from the point-to-edge
+    // correspondences
+    void computeCornerDistances(int iterCount);
+    // Find point-to-edge correspondences from the corner point cloud
+    void findCornerCorrespondence();
+    // Compute the distances and coefficients from the point-to-plane
+    // correspondences
+    void computePlaneDistances(int iterCount);
+    // Find point-to-plane correspondences from the planar point cloud
+    void findPlaneCorrespondence();
 
-    float _deltaTAbort;     ///< optimization abort threshold for deltaT
-    float _deltaRAbort;     ///< optimization abort threshold for deltaR
+private:
+    // Time per scan
+    float _scanPeriod;
+    // Number of processed frames
+    long _frameCount;
+    // Maximum number of iterations
+    std::size_t _maxIterations;
+    // Initialization flag
+    bool _systemInited;
 
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _lastCornerCloud;    ///< last corner points cloud
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _lastSurfaceCloud;   ///< last surface points cloud
+    // Optimization abort threshold for deltaT
+    float _deltaTAbort;
+    // Optimization abort threshold for deltaR
+    float _deltaRAbort;
 
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudOri;      ///< point selection
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _coeffSel;           ///< point selection coefficients
+    // Last corner points cloud
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _lastCornerCloud;
+    // Last surface points cloud
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _lastSurfaceCloud;
 
-    nanoflann::KdTreeFLANN<pcl::PointXYZI> _lastCornerKDTree;   ///< last corner cloud KD-tree
-    nanoflann::KdTreeFLANN<pcl::PointXYZI> _lastSurfaceKDTree;  ///< last surface cloud KD-tree
+    // Point selection
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudOri;
+    // Point selection coefficients
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _coeffSel;
 
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _cornerPointsSharp;      ///< sharp corner points cloud
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _cornerPointsLessSharp;  ///< less sharp corner points cloud
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _surfPointsFlat;         ///< flat surface points cloud
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _surfPointsLessFlat;     ///< less flat surface points cloud
-    pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloud;             ///< full resolution cloud
+    // Last corner cloud KD-tree
+    nanoflann::KdTreeFLANN<pcl::PointXYZI> _lastCornerKDTree;
+    // Last surface cloud KD-tree
+    nanoflann::KdTreeFLANN<pcl::PointXYZI> _lastSurfaceKDTree;
 
-    std::vector<int> _pointSearchCornerInd1;    ///< first corner point search index buffer
-    std::vector<int> _pointSearchCornerInd2;    ///< second corner point search index buffer
+    // Sharp corner points cloud
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _cornerPointsSharp;
+    // Less sharp corner points cloud
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _cornerPointsLessSharp;
+    // Flat surface points cloud
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _surfPointsFlat;
+    // Less flat surface points cloud
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _surfPointsLessFlat;
+    // Full resolution cloud
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloud;
 
-    std::vector<int> _pointSearchSurfInd1;    ///< first surface point search index buffer
-    std::vector<int> _pointSearchSurfInd2;    ///< second surface point search index buffer
-    std::vector<int> _pointSearchSurfInd3;    ///< third surface point search index buffer
+    // First corner point search index buffer
+    std::vector<int> _pointSearchCornerInd1;
+    // Second corner point search index buffer
+    std::vector<int> _pointSearchCornerInd2;
 
-    Twist _transform;     ///< optimized pose transformation
-    Twist _transformSum;  ///< accumulated optimized pose transformation
+    // First surface point search index buffer
+    std::vector<int> _pointSearchSurfInd1;
+    // Second surface point search index buffer
+    std::vector<int> _pointSearchSurfInd2;
+    // Third surface point search index buffer
+    std::vector<int> _pointSearchSurfInd3;
 
-    Angle _imuRollStart, _imuPitchStart, _imuYawStart;
-    Angle _imuRollEnd, _imuPitchEnd, _imuYawEnd;
+    // Optimized pose transformation
+    Twist _transform;
+    // Accumulated optimized pose transformation
+    Twist _transformSum;
+
+    Angle _imuRollStart;
+    Angle _imuPitchStart;
+    Angle _imuYawStart;
+    Angle _imuRollEnd;
+    Angle _imuPitchEnd;
+    Angle _imuYawEnd;
 
     Vector3 _imuShiftFromStart;
     Vector3 _imuVeloFromStart;
-  };
+};
 
-} // end namespace loam
+} // namespace loam
