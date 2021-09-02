@@ -9,10 +9,21 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   tf
-  pcl_conversions)
+  pcl_conversions
+  message_generation)
+
+find_package(Boost REQUIRED COMPONENTS system)
 
 find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED)
+
+add_service_files(
+  FILES
+  SaveOdometry.srv)
+
+generate_messages(
+  DEPENDENCIES
+  std_msgs)
 
 include_directories(
   include
@@ -45,6 +56,10 @@ target_link_libraries(laserMapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} loam )
 
 add_executable(transformMaintenance src/transform_maintenance_node.cpp)
 target_link_libraries(transformMaintenance ${catkin_LIBRARIES} ${PCL_LIBRARIES} loam )
+
+add_executable(odometryListener src/odometry_listener_node.cpp)
+target_link_libraries(odometryListener ${catkin_LIBRARIES} loam)
+add_dependencies(odometryListener loam_velodyne_gencpp)
 
 if (CATKIN_ENABLE_TESTING)
   find_package(rostest REQUIRED)
