@@ -1,3 +1,6 @@
+
+// BasicTransformMaintenance.cpp
+
 // Copyright 2013, Ji Zhang, Carnegie Mellon University
 // Further contributions copyright (c) 2016, Southwest Research Institute
 // All rights reserved.
@@ -33,51 +36,57 @@
 #include <cmath>
 #include "loam_velodyne/BasicTransformMaintenance.h"
 
-
-namespace loam
-{
+namespace loam {
 
 using std::sin;
 using std::cos;
 using std::asin;
 using std::atan2;
-
-
-void BasicTransformMaintenance::updateOdometry(double pitch, double yaw, double roll, double x, double y, double z)
+void BasicTransformMaintenance::updateOdometry(
+   double pitch, double yaw, double roll,
+   double x, double y, double z)
 {
-   _transformSum[0] = pitch;
-   _transformSum[1] = yaw;
-   _transformSum[2] = roll;
-   _transformSum[3] = x;
-   _transformSum[4] = y;
-   _transformSum[5] = z;
+    this->_transformSum[0] = static_cast<float>(pitch);
+    this->_transformSum[1] = static_cast<float>(yaw);
+    this->_transformSum[2] = static_cast<float>(roll);
+    this->_transformSum[3] = static_cast<float>(x);
+    this->_transformSum[4] = static_cast<float>(y);
+    this->_transformSum[5] = static_cast<float>(z);
 }
 
-void BasicTransformMaintenance::updateMappingTransform(double pitch, double yaw, double roll, double x, double y, double z, double twist_rot_x, double twist_rot_y, double twist_rot_z, double twist_pos_x, double twist_pos_y, double twist_pos_z)
+void BasicTransformMaintenance::updateMappingTransform(
+    double pitch, double yaw, double roll,
+    double x, double y, double z,
+    double twistRotX, double twistRotY, double twistRotZ,
+    double twistPosX, double twistPosY, double twistPosZ)
 {
-   _transformAftMapped[0] = pitch;
-   _transformAftMapped[1] = yaw;
-   _transformAftMapped[2] = roll;
+    this->_transformAftMapped[0] = static_cast<float>(pitch);
+    this->_transformAftMapped[1] = static_cast<float>(yaw);
+    this->_transformAftMapped[2] = static_cast<float>(roll);
+    this->_transformAftMapped[3] = static_cast<float>(x);
+    this->_transformAftMapped[4] = static_cast<float>(y);
+    this->_transformAftMapped[5] = static_cast<float>(z);
 
-   _transformAftMapped[3] = x;
-   _transformAftMapped[4] = y;
-   _transformAftMapped[5] = z;
-
-   _transformBefMapped[0] = twist_rot_x;
-   _transformBefMapped[1] = twist_rot_y;
-   _transformBefMapped[2] = twist_rot_z;
-
-   _transformBefMapped[3] = twist_pos_x;
-   _transformBefMapped[4] = twist_pos_y;
-   _transformBefMapped[5] = twist_pos_z;
+    this->_transformBefMapped[0] = static_cast<float>(twistRotX);
+    this->_transformBefMapped[1] = static_cast<float>(twistRotY);
+    this->_transformBefMapped[2] = static_cast<float>(twistRotZ);
+    this->_transformBefMapped[3] = static_cast<float>(twistPosX);
+    this->_transformBefMapped[4] = static_cast<float>(twistPosY);
+    this->_transformBefMapped[5] = static_cast<float>(twistPosZ);
 }
 
-void BasicTransformMaintenance::updateMappingTransform(Twist const& transformAftMapped, Twist const& transformBefMapped)
+void BasicTransformMaintenance::updateMappingTransform(
+    const Twist& transformAftMapped, const Twist& transformBefMapped)
 {
-   updateMappingTransform( transformAftMapped.rot_x.rad(), transformAftMapped.rot_y.rad(), transformAftMapped.rot_z.rad(), 
-                           transformAftMapped.pos.x(), transformAftMapped.pos.y(), transformAftMapped.pos.z(),
-                           transformBefMapped.rot_x.rad(), transformBefMapped.rot_y.rad(), transformBefMapped.rot_z.rad(),
-                           transformBefMapped.pos.x(), transformBefMapped.pos.y(), transformBefMapped.pos.z());
+    this->updateMappingTransform(
+        transformAftMapped.rot_x.rad(), transformAftMapped.rot_y.rad(),
+        transformAftMapped.rot_z.rad(),
+        transformAftMapped.pos.x(), transformAftMapped.pos.y(),
+        transformAftMapped.pos.z(),
+        transformBefMapped.rot_x.rad(), transformBefMapped.rot_y.rad(),
+        transformBefMapped.rot_z.rad(),
+        transformBefMapped.pos.x(), transformBefMapped.pos.y(),
+        transformBefMapped.pos.z());
 }
 
 void BasicTransformMaintenance::transformAssociateToMap()
@@ -177,5 +186,4 @@ void BasicTransformMaintenance::transformAssociateToMap()
       - (-sin(_transformMapped[1]) * x2 + cos(_transformMapped[1]) * z2);
 }
 
-
-} // end namespace loam
+} // namespace loam

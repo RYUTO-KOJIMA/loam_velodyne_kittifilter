@@ -1,4 +1,6 @@
-#pragma once
+
+// BasicTransformMaintenance.h
+
 // Copyright 2013, Ji Zhang, Carnegie Mellon University
 // Further contributions copyright (c) 2016, Southwest Research Institute
 // All rights reserved.
@@ -31,36 +33,59 @@
 //   J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time.
 //     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
 
+#pragma once
+
 #include "Twist.h"
 
-namespace loam
-{
+namespace loam {
 
-/** \brief Implementation of the LOAM transformation maintenance component.
- *
- */
+/** \brief Rotate the given vector around y, x, and z axes
+ * \param */
+
+/** \brief Implementation of the LOAM transformation maintenance component. */
 class BasicTransformMaintenance
 {
 public:
-   void updateOdometry(double pitch, double yaw, double roll, double x, double y, double z);
-   void updateMappingTransform(Twist const& transformAftMapped, Twist const& transformBefMapped);
-   void updateMappingTransform(double pitch, double yaw, double roll,
-      double x, double y, double z,
-      double twist_rot_x, double twist_rot_y, double twist_rot_z,
-      double twist_pos_x, double twist_pos_y, double twist_pos_z);
+    void updateOdometry(double pitch, double yaw, double roll,
+                        double x, double y, double z);
 
-   void transformAssociateToMap();
+    void updateMappingTransform(const Twist& transformAftMapped,
+                                const Twist& transformBefMapped);
 
-   // result accessor
-   auto const& transformMapped() const { return _transformMapped; }
+    void updateMappingTransform(
+        double pitch, double yaw, double roll,
+        double x, double y, double z,
+        double twistRotX, double twistRotY, double twistRotZ,
+        double twistPosX, double twistPosY, double twistPosZ);
+
+    // Combine the results from odometry and mapping
+    void transformAssociateToMap();
+
+    // Get the pose computed from odometry and mapping results
+    const auto& transformMapped() const { return this->_transformMapped; }
 
 private:
-   float _transformSum[6]{};
-   float _transformIncre[6]{};
-   float _transformMapped[6]{};
-   float _transformBefMapped[6]{};
-   float _transformAftMapped[6]{};
+    // Current odometry pose in the global coordinate frame, i.e., pose of
+    // the current odometry frame (/laser_odom) from the global coordinate
+    // frame (camera_init)
+    float _transformSum[6] { };
+    // Update of the odometry pose (difference between the last and
+    // current odometry poses) in the current odometry frame (/laser_odom),
+    // i.e., pose of the last odometry frame from the current odometry
+    // frame (/laser_odom)
+    float _transformIncre[6] { };
+    // Current pose in the global coordinate frame obtained by combining
+    // results from odometry and mapping, i.e., pose of the current frame
+    // (/camera) from the global coordinate frame (camera_init)
+    float _transformMapped[6] { };
+    // Last odometry pose in the global coordinate frame, i.e., pose of
+    // the last odometry frame (/laser_odom) from the global coordinate
+    // frame (camera_init)
+    float _transformBefMapped[6] { };
+    // Last mapped pose in the global coordinate frame, i.e., pose of
+    // the last mapping frame (/aft_mapped) from the global coordinate
+    // frame (camera_init)
+    float _transformAftMapped[6] { };
 };
 
-} // end namespace loam
-
+} // namespace loam
