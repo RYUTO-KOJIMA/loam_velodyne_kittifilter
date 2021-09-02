@@ -15,7 +15,12 @@ namespace loam {
 class Twist
 {
 public:
+    /* Default constructor */
     Twist() = default;
+    /* Constructor */
+    Twist(const float tx, const float ty, const float tz,
+          const float rx, const float ry, const float rz) :
+        rot_x(rx), rot_y(ry), rot_z(rz), pos(tx, ty, tz) { }
 
     Angle   rot_x;
     Angle   rot_y;
