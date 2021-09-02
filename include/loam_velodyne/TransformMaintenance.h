@@ -1,3 +1,6 @@
+
+// TransformMaintenance.h
+
 // Copyright 2013, Ji Zhang, Carnegie Mellon University
 // Further contributions copyright (c) 2016, Southwest Research Institute
 // All rights reserved.
@@ -30,9 +33,8 @@
 //   J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time.
 //     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
 
-#ifndef LOAM_TRANSFORMMAINTENANCE_H
-#define LOAM_TRANSFORMMAINTENANCE_H
-
+#ifndef LOAM_TRANSFORM_MAINTENANCE_H
+#define LOAM_TRANSFORM_MAINTENANCE_H
 
 #include <ros/node_handle.h>
 #include <nav_msgs/Odometry.h>
@@ -42,44 +44,50 @@
 
 namespace loam {
 
-/** \brief Implementation of the LOAM transformation maintenance component.
- *
- */
-class TransformMaintenance: public BasicTransformMaintenance {
+/** \brief Implementation of the LOAM transformation maintenance component. */
+class TransformMaintenance : public BasicTransformMaintenance
+{
 public:
-  TransformMaintenance();
+    TransformMaintenance();
 
-  /** \brief Setup component.
-   *
-   * @param node the ROS node handle
-   * @param privateNode the private ROS node handle
-   */
-  virtual bool setup(ros::NodeHandle& node, ros::NodeHandle& privateNode);
+    /** \brief Setup component.
+     *
+     * @param node The ROS node handle
+     * @param privateNode The private ROS node handle
+     */
+    virtual bool setup(ros::NodeHandle& node, ros::NodeHandle& privateNode);
 
-  /** \brief Handler method for laser odometry messages.
-   *
-   * @param laserOdometry the new laser odometry
-   */
-  void laserOdometryHandler(const nav_msgs::Odometry::ConstPtr& laserOdometry);
+    /** \brief Handler method for laser odometry messages.
+     *
+     * @param laserOdometry The new laser odometry
+     */
+    void laserOdometryHandler(
+        const nav_msgs::Odometry::ConstPtr& laserOdometry);
 
-  /** \brief Handler method for mapping odometry messages.
-   *
-   * @param odomAftMapped the new mapping odometry
-   */
-  void odomAftMappedHandler(const nav_msgs::Odometry::ConstPtr& odomAftMapped);
+    /** \brief Handler method for mapping odometry messages.
+     *
+     * @param odomAftMapped The new mapping odometry
+     */
+    void odomAftMappedHandler(
+        const nav_msgs::Odometry::ConstPtr& odomAftMapped);
 
 private:
-  nav_msgs::Odometry _laserOdometry2;         ///< latest integrated laser odometry message
-  tf::StampedTransform _laserOdometryTrans2;  ///< latest integrated laser odometry transformation
+    // Latest integrated laser odometry message
+    nav_msgs::Odometry _laserOdometry2;
+    // Latest integrated laser odometry transformation
+    tf::StampedTransform _laserOdometryTrans2;
 
-  ros::Publisher _pubLaserOdometry2;          ///< integrated laser odometry publisher
-  tf::TransformBroadcaster _tfBroadcaster2;   ///< integrated laser odometry transformation broadcaster
+    // Integrated laser odometry publisher
+    ros::Publisher _pubLaserOdometry2;
+    // Integrated laser odometry transformation broadcaster
+    tf::TransformBroadcaster _tfBroadcaster2;
 
-  ros::Subscriber _subLaserOdometry;    ///< (high frequency) laser odometry subscriber
-  ros::Subscriber _subOdomAftMapped;    ///< (low frequency) mapping odometry subscriber
+    // High frequency laser odometry subscriber
+    ros::Subscriber _subLaserOdometry;
+    // Low frequency mapping odometry subscriber
+    ros::Subscriber _subOdomAftMapped;
 };
 
-} // end namespace loam
+} // namespace loam
 
-
-#endif //LOAM_TRANSFORMMAINTENANCE_H
+#endif //LOAM_TRANSFORM_MAINTENANCE_H
