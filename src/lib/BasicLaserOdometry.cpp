@@ -498,46 +498,24 @@ void BasicLaserOdometry::computeCornerDistances(int iterCount)
         // X^L_(k + 1, i), X^L_(k, j), and X^L_(k, l) in Equation (2)
         // which are reprojected to the beginning of the current sweep
         // (i.e., timestamp t_(k + 1) in the paper)
-        const float x0 = pointSel.x;
-        const float y0 = pointSel.y;
-        const float z0 = pointSel.z;
-        const float x1 = tripod1.x;
-        const float y1 = tripod1.y;
-        const float z1 = tripod1.z;
-        const float x2 = tripod2.x;
-        const float y2 = tripod2.y;
-        const float z2 = tripod2.z;
+        const Eigen::Vector3f vecI { pointSel.x, pointSel.y, pointSel.z };
+        const Eigen::Vector3f vecJ { tripod1.x, tripod1.y, tripod1.z };
+        const Eigen::Vector3f vecL { tripod2.x, tripod2.y, tripod2.z };
+
+        const Eigen::Vector3f vecIJ = vecI - vecJ;
+        const Eigen::Vector3f vecIL = vecI - vecL;
+        const Eigen::Vector3f vecJL = vecJ - vecL;
+        const Eigen::Vector3f vecCross = vecIJ.cross(vecIL);
 
         // Compute the numerator of the Equation (2)
-        const float a012 = std::sqrt(
-            ((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1))
-            * ((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1))
-            + ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1))
-            * ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1))
-            + ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1))
-            * ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1)));
-
+        const float a012 = vecCross.norm();
         // Compute the denominator of the Equation (2)
-        const float l12 = std::sqrt(
-            (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2)
-            + (z1 - z2) * (z1 - z2));
+        const float l12 = vecJL.norm();
 
-        // Compute the normal vector (la, lb, lc) from the projection of
-        // the point `i` on the edge line between points `j` and `l` and
-        // the point `i`
-        const float la = (
-            (y1 - y2) * ((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1))
-            + (z1 - z2) * ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1)))
-            / a012 / l12;
-        const float lb = -(
-            (x1 - x2) * ((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1))
-            - (z1 - z2) * ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1)))
-            / a012 / l12;
-        const float lc = -(
-            (x1 - x2) * ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1))
-            + (y1 - y2) * ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1)))
-            / a012 / l12;
-
+        // Compute the normal vector (la, lb, lc) from the projection of the
+        // point `i` on the edge line between points `j` and `l` and the
+        // point `i`
+        const Eigen::Vector3f vecNormal = vecJL.cross(vecCross) / a012 / l12;
         // Compute the d_e using the Equation (2), which is the point-to-edge
         // distance between the point `i` and the edge line between points
         // `j` and `l` in the previous scan
@@ -545,10 +523,7 @@ void BasicLaserOdometry::computeCornerDistances(int iterCount)
 
         // Compute the projection of the point `i` on the edge line
         // between points `j` and `l` using the above normal vector
-        pcl::PointXYZI pointProj = pointSel;
-        pointProj.x -= la * ld2;
-        pointProj.y -= lb * ld2;
-        pointProj.z -= lc * ld2;
+        const Eigen::Vector3f vecProj = vecI - vecNormal * ld2;
 
         // Assign smaller weights for the points with larger
         // point-to-edge distances and zero weights for outliers
@@ -556,9 +531,9 @@ void BasicLaserOdometry::computeCornerDistances(int iterCount)
         const float s = iterCount < 5 ? 1.0f : (1.0f - 1.8f * std::fabs(ld2));
 
         pcl::PointXYZI coeff;
-        coeff.x = s * la;
-        coeff.y = s * lb;
-        coeff.z = s * lc;
+        coeff.x = s * vecNormal.x();
+        coeff.y = s * vecNormal.y();
+        coeff.z = s * vecNormal.z();
         coeff.intensity = s * ld2;
 
         // Store the coefficient vector and the original point `i`
@@ -713,32 +688,29 @@ void BasicLaserOdometry::computePlaneDistances(int iterCount)
         const pcl::PointXYZI tripod3 =
             this->_lastSurfaceCloud->points[this->_pointSearchSurfInd3[i]];
 
+        const Eigen::Vector3f vecI { pointSel.x, pointSel.y, pointSel.z };
+        const Eigen::Vector3f vecJ { tripod1.x, tripod1.y, tripod1.z };
+        const Eigen::Vector3f vecL { tripod2.x, tripod2.y, tripod2.z };
+        const Eigen::Vector3f vecM { tripod3.x, tripod3.y, tripod3.z };
+
+        const Eigen::Vector3f vecIJ = vecI - vecJ;
+        const Eigen::Vector3f vecJL = vecJ - vecL;
+        const Eigen::Vector3f vecJM = vecJ - vecM;
+
         // Compute the vector (pa, pb, pc) that is perpendicular to the
         // plane defined by points `j`, `l`, and `m`, which is written as
         // (X^L_(k, j) - X^L_(k, l)) * (X^L_(k, j) - X^L_(k, m))
-        float pa = (tripod2.y - tripod1.y) * (tripod3.z - tripod1.z)
-                   - (tripod3.y - tripod1.y) * (tripod2.z - tripod1.z);
-        float pb = (tripod2.z - tripod1.z) * (tripod3.x - tripod1.x)
-                   - (tripod3.z - tripod1.z) * (tripod2.x - tripod1.x);
-        float pc = (tripod2.x - tripod1.x) * (tripod3.y - tripod1.y)
-                   - (tripod3.x - tripod1.x) * (tripod2.y - tripod1.y);
-        // Compute the inner product using X^L_(k, j) and the above
-        // vector (X^L_(k, j) - X^L_(k, l)) * (X^L_(k, j) - X^L_(k, m))
-        float pd = -(pa * tripod1.x + pb * tripod1.y + pc * tripod1.z);
-
+        const Eigen::Vector3f vecCross = vecJL.cross(vecJM);
         // Compute the denominator of the Equation (3)
-        const float ps = std::sqrt(pa * pa + pb * pb + pc * pc);
-        pa /= ps;
-        pb /= ps;
-        pc /= ps;
-        pd /= ps;
+        const float ps = vecCross.norm();
+        // Compute the normal vector
+        const Eigen::Vector3f vecNormal = vecCross / ps;
 
         // Compute the d_h using the Equation (3), which is the point-to-plane
         // distance between the point `i` and the plane defined by three points
         // `j`, `l`, and `m`
         // Note that the distance below could be negative
-        const float pd2 = pa * pointSel.x + pb * pointSel.y
-                          + pc * pointSel.z + pd;
+        const float pd2 = vecIJ.dot(vecNormal);
 
         // Compute the projection of the point `i` on the plane defined by
         // points `j`, `l`, and `m` using the normal vector
@@ -748,11 +720,7 @@ void BasicLaserOdometry::computePlaneDistances(int iterCount)
         // two vectors point to the opposite direction and `pd2` is negative,
         // which means that `pointSel` is moved to the direction of the normal
         // vector and produces the correct result
-        pcl::PointXYZI pointProj;
-        pointProj = pointSel;
-        pointProj.x -= pa * pd2;
-        pointProj.y -= pb * pd2;
-        pointProj.z -= pc * pd2;
+        const Eigen::Vector3f vecProj = vecI - vecNormal * pd2;
 
         // Assign smaller weights for the points with larger
         // point-to-plane distances and zero weights for outliers
@@ -762,9 +730,9 @@ void BasicLaserOdometry::computePlaneDistances(int iterCount)
             / std::sqrt(calcPointDistance(pointSel)));
 
         pcl::PointXYZI coeff;
-        coeff.x = s * pa;
-        coeff.y = s * pb;
-        coeff.z = s * pc;
+        coeff.x = s * vecNormal.x();
+        coeff.y = s * vecNormal.y();
+        coeff.z = s * vecNormal.z();
         coeff.intensity = s * pd2;
 
         // Store the coefficient vector and the original point `i`
