@@ -1,3 +1,6 @@
+
+// LaserOdometry.cpp
+
 // Copyright 2013, Ji Zhang, Carnegie Mellon University
 // Further contributions copyright (c) 2016, Southwest Research Institute
 // All rights reserved.
@@ -36,296 +39,307 @@
 #include "loam_velodyne/common.h"
 #include "math_utils.h"
 
-namespace loam
-{
+namespace loam {
 
-  using std::sin;
-  using std::cos;
-  using std::asin;
-  using std::atan2;
-  using std::sqrt;
-  using std::fabs;
-  using std::pow;
-
-
-  LaserOdometry::LaserOdometry(float scanPeriod, uint16_t ioRatio, size_t maxIterations):
+LaserOdometry::LaserOdometry(float scanPeriod,
+                             std::uint16_t ioRatio,
+                             std::size_t maxIterations) :
     BasicLaserOdometry(scanPeriod, maxIterations),
     _ioRatio(ioRatio)
-  {
-    // initialize odometry and odometry tf messages
-    _laserOdometryMsg.header.frame_id = "camera_init";
-    _laserOdometryMsg.child_frame_id  = "/laser_odom";
+{
+    // Initialize odometry and odometry tf messages
+    this->_laserOdometryMsg.header.frame_id = "camera_init";
+    this->_laserOdometryMsg.child_frame_id = "/laser_odom";
 
-    _laserOdometryTrans.frame_id_       = "camera_init";
-    _laserOdometryTrans.child_frame_id_ = "/laser_odom";
-  }
+    this->_laserOdometryTrans.frame_id_ = "camera_init";
+    this->_laserOdometryTrans.child_frame_id_ = "/laser_odom";
+}
 
-
-  bool LaserOdometry::setup(ros::NodeHandle &node, ros::NodeHandle &privateNode)
-  {
-    // fetch laser odometry params
+bool LaserOdometry::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
+{
+    // Fetch laser odometry parameters
     float fParam;
     int iParam;
 
-    if (privateNode.getParam("scanPeriod", fParam))
-    {
-      if (fParam <= 0)
-      {
-        ROS_ERROR("Invalid scanPeriod parameter: %f (expected > 0)", fParam);
-        return false;
-      }
-      else
-      {
-        setScanPeriod(fParam);
-        ROS_INFO("Set scanPeriod: %g", fParam);
-      }
+    if (privateNode.getParam("scanPeriod", fParam)) {
+        if (fParam <= 0.0f) {
+            ROS_ERROR("Invalid scanPeriod parameter: %f "
+                      "(expected > 0)", fParam);
+            return false;
+        } else {
+            this->setScanPeriod(fParam);
+            ROS_INFO("Set scanPeriod: %g", fParam);
+        }
     }
 
-    if (privateNode.getParam("ioRatio", iParam))
-    {
-      if (iParam < 1)
-      {
-        ROS_ERROR("Invalid ioRatio parameter: %d (expected > 0)", iParam);
-        return false;
-      }
-      else
-      {
-        _ioRatio = iParam;
-        ROS_INFO("Set ioRatio: %d", iParam);
-      }
+    if (privateNode.getParam("ioRatio", iParam)) {
+        if (iParam < 1) {
+            ROS_ERROR("Invalid ioRatio parameter: %d (expected > 0)", iParam);
+            return false;
+        } else {
+            this->_ioRatio = iParam;
+            ROS_INFO("Set ioRatio: %d", iParam);
+        }
     }
 
-    if (privateNode.getParam("maxIterations", iParam))
-    {
-      if (iParam < 1)
-      {
-        ROS_ERROR("Invalid maxIterations parameter: %d (expected > 0)", iParam);
-        return false;
-      }
-      else
-      {
-        setMaxIterations(iParam);
-        ROS_INFO("Set maxIterations: %d", iParam);
-      }
+    if (privateNode.getParam("maxIterations", iParam)) {
+        if (iParam < 1) {
+            ROS_ERROR("Invalid maxIterations parameter: %d "
+                      "(expected > 0)", iParam);
+            return false;
+        } else {
+            this->setMaxIterations(iParam);
+            ROS_INFO("Set maxIterations: %d", iParam);
+        }
     }
 
-    if (privateNode.getParam("deltaTAbort", fParam))
-    {
-      if (fParam <= 0)
-      {
-        ROS_ERROR("Invalid deltaTAbort parameter: %f (expected > 0)", fParam);
-        return false;
-      }
-      else
-      {
-        setDeltaTAbort(fParam);
-        ROS_INFO("Set deltaTAbort: %g", fParam);
-      }
+    if (privateNode.getParam("deltaTAbort", fParam)) {
+        if (fParam <= 0.0f) {
+            ROS_ERROR("Invalid deltaTAbort parameter: %f "
+                      "(expected > 0)", fParam);
+            return false;
+        } else {
+            this->setDeltaTAbort(fParam);
+            ROS_INFO("Set deltaTAbort: %g", fParam);
+        }
     }
 
-    if (privateNode.getParam("deltaRAbort", fParam))
-    {
-      if (fParam <= 0)
-      {
-        ROS_ERROR("Invalid deltaRAbort parameter: %f (expected > 0)", fParam);
-        return false;
-      }
-      else
-      {
-        setDeltaRAbort(fParam);
-        ROS_INFO("Set deltaRAbort: %g", fParam);
-      }
+    if (privateNode.getParam("deltaRAbort", fParam)) {
+        if (fParam <= 0.0f) {
+            ROS_ERROR("Invalid deltaRAbort parameter: %f "
+                      "(expected > 0)", fParam);
+            return false;
+        } else {
+            this->setDeltaRAbort(fParam);
+            ROS_INFO("Set deltaRAbort: %g", fParam);
+        }
     }
 
-    // advertise laser odometry topics
-    _pubLaserCloudCornerLast = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_corner_last", 2);
-    _pubLaserCloudSurfLast = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surf_last", 2);
-    _pubLaserCloudFullRes = node.advertise<sensor_msgs::PointCloud2>("/velodyne_cloud_3", 2);
-    _pubLaserOdometry = node.advertise<nav_msgs::Odometry>("/laser_odom_to_init", 5);
+    // Advertise laser odometry topics
+    this->_pubLaserCloudCornerLast = node.advertise<sensor_msgs::PointCloud2>(
+        "/laser_cloud_corner_last", 2);
+    this->_pubLaserCloudSurfLast = node.advertise<sensor_msgs::PointCloud2>(
+        "/laser_cloud_surf_last", 2);
+    this->_pubLaserCloudFullRes = node.advertise<sensor_msgs::PointCloud2>(
+        "/velodyne_cloud_3", 2);
+    this->_pubLaserOdometry = node.advertise<nav_msgs::Odometry>(
+        "/laser_odom_to_init", 5);
 
-    // subscribe to scan registration topics
-    _subCornerPointsSharp = node.subscribe<sensor_msgs::PointCloud2>
-      ("/laser_cloud_sharp", 2, &LaserOdometry::laserCloudSharpHandler, this);
-
-    _subCornerPointsLessSharp = node.subscribe<sensor_msgs::PointCloud2>
-      ("/laser_cloud_less_sharp", 2, &LaserOdometry::laserCloudLessSharpHandler, this);
-
-    _subSurfPointsFlat = node.subscribe<sensor_msgs::PointCloud2>
-      ("/laser_cloud_flat", 2, &LaserOdometry::laserCloudFlatHandler, this);
-
-    _subSurfPointsLessFlat = node.subscribe<sensor_msgs::PointCloud2>
-      ("/laser_cloud_less_flat", 2, &LaserOdometry::laserCloudLessFlatHandler, this);
-
-    _subLaserCloudFullRes = node.subscribe<sensor_msgs::PointCloud2>
-      ("/velodyne_cloud_2", 2, &LaserOdometry::laserCloudFullResHandler, this);
-
-    _subImuTrans = node.subscribe<sensor_msgs::PointCloud2>
-      ("/imu_trans", 5, &LaserOdometry::imuTransHandler, this);
+    // Subscribe scan registration topics
+    this->_subCornerPointsSharp = node.subscribe<sensor_msgs::PointCloud2>(
+        "/laser_cloud_sharp", 2,
+        &LaserOdometry::laserCloudSharpHandler, this);
+    this->_subCornerPointsLessSharp = node.subscribe<sensor_msgs::PointCloud2>(
+        "/laser_cloud_less_sharp", 2,
+        &LaserOdometry::laserCloudLessSharpHandler, this);
+    this->_subSurfPointsFlat = node.subscribe<sensor_msgs::PointCloud2>(
+        "/laser_cloud_flat", 2,
+        &LaserOdometry::laserCloudFlatHandler, this);
+    this->_subSurfPointsLessFlat = node.subscribe<sensor_msgs::PointCloud2>(
+        "/laser_cloud_less_flat", 2,
+        &LaserOdometry::laserCloudLessFlatHandler, this);
+    this->_subLaserCloudFullRes = node.subscribe<sensor_msgs::PointCloud2>(
+        "/velodyne_cloud_2", 2,
+        &LaserOdometry::laserCloudFullResHandler, this);
+    this->_subImuTrans = node.subscribe<sensor_msgs::PointCloud2>(
+        "/imu_trans", 5,
+        &LaserOdometry::imuTransHandler, this);
 
     return true;
-  }
+}
 
-  void LaserOdometry::reset()
-  {
-    _newCornerPointsSharp = false;
-    _newCornerPointsLessSharp = false;
-    _newSurfPointsFlat = false;
-    _newSurfPointsLessFlat = false;
-    _newLaserCloudFullRes = false;
-    _newImuTrans = false;
-  }
+void LaserOdometry::reset()
+{
+    this->_newCornerPointsSharp = false;
+    this->_newCornerPointsLessSharp = false;
+    this->_newSurfPointsFlat = false;
+    this->_newSurfPointsLessFlat = false;
+    this->_newLaserCloudFullRes = false;
+    this->_newImuTrans = false;
+}
 
-  void LaserOdometry::laserCloudSharpHandler(const sensor_msgs::PointCloud2ConstPtr& cornerPointsSharpMsg)
-  {
-    _timeCornerPointsSharp = cornerPointsSharpMsg->header.stamp;
+void LaserOdometry::laserCloudSharpHandler(
+    const sensor_msgs::PointCloud2ConstPtr& cornerPointsSharpMsg)
+{
+    this->_timeCornerPointsSharp = cornerPointsSharpMsg->header.stamp;
 
-    cornerPointsSharp()->clear();
-    pcl::fromROSMsg(*cornerPointsSharpMsg, *cornerPointsSharp());
-    std::vector<int> indices;
-    pcl::removeNaNFromPointCloud(*cornerPointsSharp(), *cornerPointsSharp(), indices);
-    _newCornerPointsSharp = true;
-  }
+    this->cornerPointsSharp()->clear();
+    pcl::fromROSMsg(*cornerPointsSharpMsg, *this->cornerPointsSharp());
+    removeNaNFromPointCloud<pcl::PointXYZI>(this->cornerPointsSharp());
+    this->_newCornerPointsSharp = true;
+}
 
+void LaserOdometry::laserCloudLessSharpHandler(
+    const sensor_msgs::PointCloud2ConstPtr& cornerPointsLessSharpMsg)
+{
+    this->_timeCornerPointsLessSharp = cornerPointsLessSharpMsg->header.stamp;
 
+    this->cornerPointsLessSharp()->clear();
+    pcl::fromROSMsg(*cornerPointsLessSharpMsg, *this->cornerPointsLessSharp());
+    removeNaNFromPointCloud<pcl::PointXYZI>(this->cornerPointsLessSharp());
+    this->_newCornerPointsLessSharp = true;
+}
 
-  void LaserOdometry::laserCloudLessSharpHandler(const sensor_msgs::PointCloud2ConstPtr& cornerPointsLessSharpMsg)
-  {
-    _timeCornerPointsLessSharp = cornerPointsLessSharpMsg->header.stamp;
+void LaserOdometry::laserCloudFlatHandler(
+    const sensor_msgs::PointCloud2ConstPtr& surfPointsFlatMsg)
+{
+    this->_timeSurfPointsFlat = surfPointsFlatMsg->header.stamp;
 
-    cornerPointsLessSharp()->clear();
-    pcl::fromROSMsg(*cornerPointsLessSharpMsg, *cornerPointsLessSharp());
-    std::vector<int> indices;
-    pcl::removeNaNFromPointCloud(*cornerPointsLessSharp(), *cornerPointsLessSharp(), indices);
-    _newCornerPointsLessSharp = true;
-  }
+    this->surfPointsFlat()->clear();
+    pcl::fromROSMsg(*surfPointsFlatMsg, *this->surfPointsFlat());
+    removeNaNFromPointCloud<pcl::PointXYZI>(this->surfPointsFlat());
+    this->_newSurfPointsFlat = true;
+}
 
+void LaserOdometry::laserCloudLessFlatHandler(
+    const sensor_msgs::PointCloud2ConstPtr& surfPointsLessFlatMsg)
+{
+    this->_timeSurfPointsLessFlat = surfPointsLessFlatMsg->header.stamp;
 
+    this->surfPointsLessFlat()->clear();
+    pcl::fromROSMsg(*surfPointsLessFlatMsg, *this->surfPointsLessFlat());
+    removeNaNFromPointCloud<pcl::PointXYZI>(this->surfPointsLessFlat());
+    this->_newSurfPointsLessFlat = true;
+}
 
-  void LaserOdometry::laserCloudFlatHandler(const sensor_msgs::PointCloud2ConstPtr& surfPointsFlatMsg)
-  {
-    _timeSurfPointsFlat = surfPointsFlatMsg->header.stamp;
+void LaserOdometry::laserCloudFullResHandler(
+    const sensor_msgs::PointCloud2ConstPtr& laserCloudFullResMsg)
+{
+    this->_timeLaserCloudFullRes = laserCloudFullResMsg->header.stamp;
 
-    surfPointsFlat()->clear();
-    pcl::fromROSMsg(*surfPointsFlatMsg, *surfPointsFlat());
-    std::vector<int> indices;
-    pcl::removeNaNFromPointCloud(*surfPointsFlat(), *surfPointsFlat(), indices);
-    _newSurfPointsFlat = true;
-  }
+    this->laserCloud()->clear();
+    pcl::fromROSMsg(*laserCloudFullResMsg, *this->laserCloud());
+    removeNaNFromPointCloud<pcl::PointXYZI>(this->laserCloud());
+    this->_newLaserCloudFullRes = true;
+}
 
-
-
-  void LaserOdometry::laserCloudLessFlatHandler(const sensor_msgs::PointCloud2ConstPtr& surfPointsLessFlatMsg)
-  {
-    _timeSurfPointsLessFlat = surfPointsLessFlatMsg->header.stamp;
-
-    surfPointsLessFlat()->clear();
-    pcl::fromROSMsg(*surfPointsLessFlatMsg, *surfPointsLessFlat());
-    std::vector<int> indices;
-    pcl::removeNaNFromPointCloud(*surfPointsLessFlat(), *surfPointsLessFlat(), indices);
-    _newSurfPointsLessFlat = true;
-  }
-
-
-
-  void LaserOdometry::laserCloudFullResHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudFullResMsg)
-  {
-    _timeLaserCloudFullRes = laserCloudFullResMsg->header.stamp;
-
-    laserCloud()->clear();
-    pcl::fromROSMsg(*laserCloudFullResMsg, *laserCloud());
-    std::vector<int> indices;
-    pcl::removeNaNFromPointCloud(*laserCloud(), *laserCloud(), indices);
-    _newLaserCloudFullRes = true;
-  }
-
-
-
-  void LaserOdometry::imuTransHandler(const sensor_msgs::PointCloud2ConstPtr& imuTransMsg)
-  {
-    _timeImuTrans = imuTransMsg->header.stamp;
+void LaserOdometry::imuTransHandler(
+    const sensor_msgs::PointCloud2ConstPtr& imuTransMsg)
+{
+    this->_timeImuTrans = imuTransMsg->header.stamp;
 
     pcl::PointCloud<pcl::PointXYZ> imuTrans;
     pcl::fromROSMsg(*imuTransMsg, imuTrans);
-    updateIMU(imuTrans);
-    _newImuTrans = true;
-  }
+    this->updateIMU(imuTrans);
+    this->_newImuTrans = true;
+}
 
-
-  void LaserOdometry::spin()
-  {
+void LaserOdometry::spin()
+{
     ros::Rate rate(100);
     bool status = ros::ok();
 
-    // loop until shutdown
-    while (status)
-    {
-      ros::spinOnce();
+    // Loop until shutdown
+    while (status) {
+        ros::spinOnce();
 
-      // try processing new data
-      process();
+        // Try processing new data
+        this->process();
 
-      status = ros::ok();
-      rate.sleep();
+        status = ros::ok();
+        rate.sleep();
     }
-  }
+}
 
+bool LaserOdometry::hasNewData()
+{
+    // Compute the differences between the timestamp of the most recent
+    // less flat point cloud and timestamps of the other messages
+    const auto diffSharpPoints =
+        this->_timeCornerPointsSharp - this->_timeSurfPointsLessFlat;
+    const auto diffLessSharpPoints =
+        this->_timeCornerPointsLessSharp - this->_timeSurfPointsLessFlat;
+    const auto diffFlatPoints =
+        this->_timeSurfPointsFlat - this->_timeSurfPointsLessFlat;
+    const auto diffFullResPoints =
+        this->_timeLaserCloudFullRes - this->_timeSurfPointsLessFlat;
+    const auto diffImuTrans =
+        this->_timeImuTrans - this->_timeSurfPointsLessFlat;
 
-  bool LaserOdometry::hasNewData()
-  {
-    return _newCornerPointsSharp && _newCornerPointsLessSharp && _newSurfPointsFlat &&
-      _newSurfPointsLessFlat && _newLaserCloudFullRes && _newImuTrans &&
-      fabs((_timeCornerPointsSharp - _timeSurfPointsLessFlat).toSec()) < 0.005 &&
-      fabs((_timeCornerPointsLessSharp - _timeSurfPointsLessFlat).toSec()) < 0.005 &&
-      fabs((_timeSurfPointsFlat - _timeSurfPointsLessFlat).toSec()) < 0.005 &&
-      fabs((_timeLaserCloudFullRes - _timeSurfPointsLessFlat).toSec()) < 0.005 &&
-      fabs((_timeImuTrans - _timeSurfPointsLessFlat).toSec()) < 0.005;
-  }
+    return this->_newCornerPointsSharp &&
+           this->_newCornerPointsLessSharp &&
+           this->_newSurfPointsFlat &&
+           this->_newSurfPointsLessFlat &&
+           this->_newLaserCloudFullRes &&
+           this->_newImuTrans &&
+           std::fabs(diffSharpPoints.toSec()) < 0.005 &&
+           std::fabs(diffLessSharpPoints.toSec()) < 0.005 &&
+           std::fabs(diffFlatPoints.toSec()) < 0.005 &&
+           std::fabs(diffFullResPoints.toSec()) < 0.005 &&
+           std::fabs(diffImuTrans.toSec()) < 0.005;
+}
 
+void LaserOdometry::process()
+{
+    if (!this->hasNewData())
+        return;
 
-
-  void LaserOdometry::process()
-  {
-    if (!hasNewData())
-      return;// waiting for new data to arrive...
-
-    reset();// reset flags, etc.
+    this->reset();
     BasicLaserOdometry::process();
-    publishResult();
-  }
+    this->publishResult();
+}
 
+void LaserOdometry::publishResult()
+{
+    // ROS uses a right-handed coordinate system with x-axis forward,
+    // y-axis left, and z-axis upward, while LOAM implementation uses
+    // a right-handed coordinate system with z-axis forward, x-axis left, and
+    // y-axis upward, i.e., ROS uses fixed XYZ Euler angles, while LOAM uses
+    // fixed ZXY Euler angles
 
-  void LaserOdometry::publishResult()
-  {
-    // publish odometry transformations
-    geometry_msgs::Quaternion geoQuat = tf::createQuaternionMsgFromRollPitchYaw(transformSum().rot_z.rad(),
-                                                                               -transformSum().rot_x.rad(),
-                                                                               -transformSum().rot_y.rad());
+    // Compute (geoQuat.w, geoQuat.x, geoQuat.y, geoQuat.z) =
+    // q_z(-rot_y) q_y(-rot_x) q_x(rot_z) using fixed XYZ Euler angles,
+    // and q_y(rot_y) q_x(rot_x) q_z(rot_z) is easily constructed as
+    // (geoQuat.w, -geoQuat.y, -geoQuat.z, -geoQuat.x)
 
-    _laserOdometryMsg.header.stamp            = _timeSurfPointsLessFlat;
-    _laserOdometryMsg.pose.pose.orientation.x = -geoQuat.y;
-    _laserOdometryMsg.pose.pose.orientation.y = -geoQuat.z;
-    _laserOdometryMsg.pose.pose.orientation.z = geoQuat.x;
-    _laserOdometryMsg.pose.pose.orientation.w = geoQuat.w;
-    _laserOdometryMsg.pose.pose.position.x    = transformSum().pos.x();
-    _laserOdometryMsg.pose.pose.position.y    = transformSum().pos.y();
-    _laserOdometryMsg.pose.pose.position.z    = transformSum().pos.z();
-    _pubLaserOdometry.publish(_laserOdometryMsg);
+    // Publish odometry transformations
+    const geometry_msgs::Quaternion geoQuat =
+        tf::createQuaternionMsgFromRollPitchYaw(
+            this->transformSum().rot_z.rad(),
+            -this->transformSum().rot_x.rad(),
+            -this->transformSum().rot_y.rad());
 
-    _laserOdometryTrans.stamp_ = _timeSurfPointsLessFlat;
-    _laserOdometryTrans.setRotation(tf::Quaternion(-geoQuat.y, -geoQuat.z, geoQuat.x, geoQuat.w));
-    _laserOdometryTrans.setOrigin(tf::Vector3(transformSum().pos.x(), transformSum().pos.y(), transformSum().pos.z()));
-    _tfBroadcaster.sendTransform(_laserOdometryTrans);
+    this->_laserOdometryMsg.header.stamp = this->_timeSurfPointsLessFlat;
+    // (orientation.w, orientation.x, orientation.y, orientation.z) equals to
+    // q_y(rot_y) q_x(rot_x) q_z(rot_z) which represents the rotation
+    // quaternion of the optimized odometry pose `transformSum()`
+    auto& poseMsg = this->_laserOdometryMsg.pose.pose;
+    poseMsg.orientation.x = -geoQuat.y;
+    poseMsg.orientation.y = -geoQuat.z;
+    poseMsg.orientation.z = geoQuat.x;
+    poseMsg.orientation.w = geoQuat.w;
+    poseMsg.position.x = this->transformSum().pos.x();
+    poseMsg.position.y = this->transformSum().pos.y();
+    poseMsg.position.z = this->transformSum().pos.z();
+    this->_pubLaserOdometry.publish(this->_laserOdometryMsg);
 
-    // publish cloud results according to the input output ratio
-    if (_ioRatio < 2 || frameCount() % _ioRatio == 1)
-    {
-      ros::Time sweepTime = _timeSurfPointsLessFlat;
-      publishCloudMsg(_pubLaserCloudCornerLast, *lastCornerCloud(), sweepTime, "/camera");
-      publishCloudMsg(_pubLaserCloudSurfLast, *lastSurfaceCloud(), sweepTime, "/camera");
+    this->_laserOdometryTrans.stamp_ = this->_timeSurfPointsLessFlat;
+    // (geoQuat.w, -geoQuat.y, -geoQuat.z, geoQuat.x) equals to
+    // q_y(rot_y) q_x(rot_x) q_z(rot_z)
+    this->_laserOdometryTrans.setRotation(
+        tf::Quaternion(-geoQuat.y, -geoQuat.z, geoQuat.x, geoQuat.w));
+    this->_laserOdometryTrans.setOrigin(
+        tf::Vector3(this->transformSum().pos.x(),
+                    this->transformSum().pos.y(),
+                    this->transformSum().pos.z()));
+    this->_tfBroadcaster.sendTransform(this->_laserOdometryTrans);
 
-      transformToEnd(laserCloud());  // transform full resolution cloud to sweep end before sending it
-      publishCloudMsg(_pubLaserCloudFullRes, *laserCloud(), sweepTime, "/camera");
+    // Publish cloud results according to the input output ratio
+    if (this->_ioRatio < 2 || this->frameCount() % this->_ioRatio == 1) {
+        ros::Time sweepTime = this->_timeSurfPointsLessFlat;
+        // `lastCornerCloud()` and `lastSurfaceCloud()` are already reprojected
+        // to the end of the current sweep
+        publishCloudMsg(this->_pubLaserCloudCornerLast,
+                        *this->lastCornerCloud(), sweepTime, "/camera");
+        publishCloudMsg(this->_pubLaserCloudSurfLast,
+                        *this->lastSurfaceCloud(), sweepTime, "/camera");
+
+        // `laserCloud()` is reprojected to the beginning of the current sweep,
+        // and should be reprojected to the end of the current sweep
+        this->transformToEnd(this->laserCloud());
+        publishCloudMsg(this->_pubLaserCloudFullRes,
+                        *this->laserCloud(), sweepTime, "/camera");
     }
-  }
+}
 
-} // end namespace loam
+} // namespace loam

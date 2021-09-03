@@ -1,3 +1,6 @@
+
+// LaserOdometry.h
+
 // Copyright 2013, Ji Zhang, Carnegie Mellon University
 // Further contributions copyright (c) 2016, Southwest Research Institute
 // All rights reserved.
@@ -30,12 +33,11 @@
 //   J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time.
 //     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
 
-#ifndef LOAM_LASERODOMETRY_H
-#define LOAM_LASERODOMETRY_H
+#ifndef LOAM_LASER_ODOMETRY_H
+#define LOAM_LASER_ODOMETRY_H
 
-
-#include "Twist.h"
-#include "nanoflann_pcl.h"
+#include "loam_velodyne/Twist.h"
+#include "loam_velodyne/nanoflann_pcl.h"
 
 #include <ros/node_handle.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -45,114 +47,132 @@
 #include <tf/transform_datatypes.h>
 #include <tf/transform_broadcaster.h>
 
-#include "BasicLaserOdometry.h"
+#include "loam_velodyne/BasicLaserOdometry.h"
 
-namespace loam
+namespace loam {
+
+/** \brief Implementation of the LOAM laser odometry component. */
+class LaserOdometry : public BasicLaserOdometry
 {
-
-  /** \brief Implementation of the LOAM laser odometry component.
-   *
-   */
-  class LaserOdometry : public BasicLaserOdometry
-  {
-  public:
-    explicit LaserOdometry(float scanPeriod = 0.1, uint16_t ioRatio = 2, size_t maxIterations = 25);
+public:
+    LaserOdometry(float scanPeriod = 0.1,
+                  std::uint16_t ioRatio = 2,
+                  std::size_t maxIterations = 25);
 
     /** \brief Setup component.
      *
-     * @param node the ROS node handle
-     * @param privateNode the private ROS node handle
+     * @param node The ROS node handle
+     * @param privateNode The private ROS node handle
      */
-    virtual bool setup(ros::NodeHandle& node,
-      ros::NodeHandle& privateNode);
+    virtual bool setup(ros::NodeHandle& node, ros::NodeHandle& privateNode);
 
     /** \brief Handler method for a new sharp corner cloud.
-     *
-     * @param cornerPointsSharpMsg the new sharp corner cloud message
-     */
-    void laserCloudSharpHandler(const sensor_msgs::PointCloud2ConstPtr& cornerPointsSharpMsg);
+     * @param cornerPointsSharpMsg The sharp corner cloud message */
+    void laserCloudSharpHandler(
+        const sensor_msgs::PointCloud2ConstPtr& cornerPointsSharpMsg);
 
     /** \brief Handler method for a new less sharp corner cloud.
-     *
-     * @param cornerPointsLessSharpMsg the new less sharp corner cloud message
-     */
-    void laserCloudLessSharpHandler(const sensor_msgs::PointCloud2ConstPtr& cornerPointsLessSharpMsg);
+     * @param cornerPointsLessSharpMsg The less sharp corner cloud message */
+    void laserCloudLessSharpHandler(
+        const sensor_msgs::PointCloud2ConstPtr& cornerPointsLessSharpMsg);
 
     /** \brief Handler method for a new flat surface cloud.
-     *
-     * @param surfPointsFlatMsg the new flat surface cloud message
-     */
-    void laserCloudFlatHandler(const sensor_msgs::PointCloud2ConstPtr& surfPointsFlatMsg);
+     * @param surfPointsFlatMsg The flat surface cloud message */
+    void laserCloudFlatHandler(
+        const sensor_msgs::PointCloud2ConstPtr& surfPointsFlatMsg);
 
     /** \brief Handler method for a new less flat surface cloud.
-     *
-     * @param surfPointsLessFlatMsg the new less flat surface cloud message
-     */
-    void laserCloudLessFlatHandler(const sensor_msgs::PointCloud2ConstPtr& surfPointsLessFlatMsg);
+     * @param surfPointsLessFlatMsg The less flat surface cloud message */
+    void laserCloudLessFlatHandler(
+        const sensor_msgs::PointCloud2ConstPtr& surfPointsLessFlatMsg);
 
     /** \brief Handler method for a new full resolution cloud.
-     *
-     * @param laserCloudFullResMsg the new full resolution cloud message
-     */
-    void laserCloudFullResHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudFullResMsg);
+     * @param laserCloudFullResMsg The full resolution cloud message */
+    void laserCloudFullResHandler(
+        const sensor_msgs::PointCloud2ConstPtr& laserCloudFullResMsg);
 
-    /** \brief Handler method for a new IMU transformation information.
-     *
-     * @param laserCloudFullResMsg the new IMU transformation information message
-     */
+    /** \brief Handler method for a new IMU transformation.
+     * @param laserCloudFullResMsg The IMU transformation message */
     void imuTransHandler(const sensor_msgs::PointCloud2ConstPtr& imuTransMsg);
 
-
-    /** \brief Process incoming messages in a loop until shutdown (used in active mode). */
+    /** \brief Process incoming messages in a loop until shutdown
+     * (used in active mode). */
     void spin();
 
     /** \brief Try to process buffered data. */
     void process();
 
-  protected:
+protected:
     /** \brief Reset flags, etc. */
     void reset();
 
-    /** \brief Check if all required information for a new processing step is available. */
+    /** \brief Check if all required information for a new processing
+     * step is available. */
     bool hasNewData();
 
     /** \brief Publish the current result via the respective topics. */
     void publishResult();
 
-  private:
-    uint16_t _ioRatio;       ///< ratio of input to output frames
+private:
+    // Ratio of input to output frames
+    std::uint16_t _ioRatio;
 
-    ros::Time _timeCornerPointsSharp;      ///< time of current sharp corner cloud
-    ros::Time _timeCornerPointsLessSharp;  ///< time of current less sharp corner cloud
-    ros::Time _timeSurfPointsFlat;         ///< time of current flat surface cloud
-    ros::Time _timeSurfPointsLessFlat;     ///< time of current less flat surface cloud
-    ros::Time _timeLaserCloudFullRes;      ///< time of current full resolution cloud
-    ros::Time _timeImuTrans;               ///< time of current IMU transformation information
+    // Time of current sharp corner cloud
+    ros::Time _timeCornerPointsSharp;
+    // Time of current less sharp corner cloud
+    ros::Time _timeCornerPointsLessSharp;
+    // Time of current flat surface cloud
+    ros::Time _timeSurfPointsFlat;
+    // Time of current less flat surface cloud
+    ros::Time _timeSurfPointsLessFlat;
+    // Time of current full resolution cloud
+    ros::Time _timeLaserCloudFullRes;
+    // Time of current IMU transformation information
+    ros::Time _timeImuTrans;
 
-    bool _newCornerPointsSharp;       ///< flag if a new sharp corner cloud has been received
-    bool _newCornerPointsLessSharp;   ///< flag if a new less sharp corner cloud has been received
-    bool _newSurfPointsFlat;          ///< flag if a new flat surface cloud has been received
-    bool _newSurfPointsLessFlat;      ///< flag if a new less flat surface cloud has been received
-    bool _newLaserCloudFullRes;       ///< flag if a new full resolution cloud has been received
-    bool _newImuTrans;                ///< flag if a new IMU transformation information cloud has been received
+    // Flag if a new sharp corner cloud has been received
+    bool _newCornerPointsSharp;
+    // Flag if a new less sharp corner cloud has been received
+    bool _newCornerPointsLessSharp;
+    // Flag if a new flat surface cloud has been received
+    bool _newSurfPointsFlat;
+    // Flag if a new less flat surface cloud has been received
+    bool _newSurfPointsLessFlat;
+    // Flag if a new full resolution cloud has been received
+    bool _newLaserCloudFullRes;
+    // Flag if a new IMU transformation information cloud has been received
+    bool _newImuTrans;
 
-    nav_msgs::Odometry _laserOdometryMsg;       ///< laser odometry message
-    tf::StampedTransform _laserOdometryTrans;   ///< laser odometry transformation
+    // Laser odometry message
+    nav_msgs::Odometry _laserOdometryMsg;
+    // Laser odometry transformation
+    tf::StampedTransform _laserOdometryTrans;
 
-    ros::Publisher _pubLaserCloudCornerLast;  ///< last corner cloud message publisher
-    ros::Publisher _pubLaserCloudSurfLast;    ///< last surface cloud message publisher
-    ros::Publisher _pubLaserCloudFullRes;     ///< full resolution cloud message publisher
-    ros::Publisher _pubLaserOdometry;         ///< laser odometry publisher
-    tf::TransformBroadcaster _tfBroadcaster;  ///< laser odometry transform broadcaster
+    // Last corner cloud message publisher
+    ros::Publisher _pubLaserCloudCornerLast;
+    // Last surface cloud message publisher
+    ros::Publisher _pubLaserCloudSurfLast;
+    // Full resolution cloud message publisher
+    ros::Publisher _pubLaserCloudFullRes;
+    // Laser odometry publisher
+    ros::Publisher _pubLaserOdometry;
+    // Laser odometry transform broadcaster
+    tf::TransformBroadcaster _tfBroadcaster;
 
-    ros::Subscriber _subCornerPointsSharp;      ///< sharp corner cloud message subscriber
-    ros::Subscriber _subCornerPointsLessSharp;  ///< less sharp corner cloud message subscriber
-    ros::Subscriber _subSurfPointsFlat;         ///< flat surface cloud message subscriber
-    ros::Subscriber _subSurfPointsLessFlat;     ///< less flat surface cloud message subscriber
-    ros::Subscriber _subLaserCloudFullRes;      ///< full resolution cloud message subscriber
-    ros::Subscriber _subImuTrans;               ///< IMU transformation information message subscriber
-  };
+    // Sharp corner cloud message subscriber
+    ros::Subscriber _subCornerPointsSharp;
+    // Less sharp corner cloud message subscriber
+    ros::Subscriber _subCornerPointsLessSharp;
+    // Flat surface cloud message subscriber
+    ros::Subscriber _subSurfPointsFlat;
+    // Less flat surface cloud message subscriber
+    ros::Subscriber _subSurfPointsLessFlat;
+    // Full resolution cloud message subscriber
+    ros::Subscriber _subLaserCloudFullRes;
+    // IMU transformation message subscriber
+    ros::Subscriber _subImuTrans;
+};
 
-} // end namespace loam
+} // namespace loam
 
-#endif //LOAM_LASERODOMETRY_H
+#endif //LOAM_LASER_ODOMETRY_H
