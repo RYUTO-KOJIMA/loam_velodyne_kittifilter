@@ -2,6 +2,7 @@
 // BasicLaserOdometry.cpp
 
 #include "loam_velodyne/BasicLaserOdometry.h"
+#include "loam_velodyne/Transform.hpp"
 #include "math_utils.h"
 
 #include <pcl/filters/filter.h>
@@ -108,61 +109,29 @@ void BasicLaserOdometry::pluginIMURotation(
     const Angle& alx, const Angle& aly, const Angle& alz,
     Angle& acx, Angle& acy, Angle& acz)
 {
-   float sbcx = bcx.sin();
-   float cbcx = bcx.cos();
-   float sbcy = bcy.sin();
-   float cbcy = bcy.cos();
-   float sbcz = bcz.sin();
-   float cbcz = bcz.cos();
+    // Create rotation matrices R_bc = Ry(bcy) Rx(bcx) Rz(bcz),
+    // R_bl = Ry(bly) Rx(blx) Rz(blz), and R_al = Ry(aly) Rx(alx) Rz(alz)
+    const Eigen::Matrix3f rotationMatBc =
+        rotationMatrixZXY(bcx.rad(), bcy.rad(), bcz.rad());
+    const Eigen::Matrix3f rotationMatBl =
+        rotationMatrixZXY(blx.rad(), bly.rad(), blz.rad());
+    const Eigen::Matrix3f rotationMatAl =
+        rotationMatrixZXY(alx.rad(), aly.rad(), alz.rad());
 
-   float sblx = blx.sin();
-   float cblx = blx.cos();
-   float sbly = bly.sin();
-   float cbly = bly.cos();
-   float sblz = blz.sin();
-   float cblz = blz.cos();
+    // Compose three rotation matrices
+    const Eigen::Matrix3f rotationMatAc =
+        rotationMatBc * rotationMatBl.transpose() * rotationMatAl;
+    // Get three Euler angles from the rotation matrix above
+    Eigen::Vector3f eulerAnglesAc;
+    eulerAnglesFromRotationZXY(rotationMatAc,
+                               eulerAnglesAc.x(),
+                               eulerAnglesAc.y(),
+                               eulerAnglesAc.z());
 
-   float salx = alx.sin();
-   float calx = alx.cos();
-   float saly = aly.sin();
-   float caly = aly.cos();
-   float salz = alz.sin();
-   float calz = alz.cos();
-
-   float srx = -sbcx * (salx*sblx + calx * caly*cblx*cbly + calx * cblx*saly*sbly)
-      - cbcx * cbcz*(calx*saly*(cbly*sblz - cblz * sblx*sbly)
-                     - calx * caly*(sbly*sblz + cbly * cblz*sblx) + cblx * cblz*salx)
-      - cbcx * sbcz*(calx*caly*(cblz*sbly - cbly * sblx*sblz)
-                     - calx * saly*(cbly*cblz + sblx * sbly*sblz) + cblx * salx*sblz);
-   acx = -asin(srx);
-
-   float srycrx = (cbcy*sbcz - cbcz * sbcx*sbcy)*(calx*saly*(cbly*sblz - cblz * sblx*sbly)
-                                                  - calx * caly*(sbly*sblz + cbly * cblz*sblx) + cblx * cblz*salx)
-      - (cbcy*cbcz + sbcx * sbcy*sbcz)*(calx*caly*(cblz*sbly - cbly * sblx*sblz)
-                                        - calx * saly*(cbly*cblz + sblx * sbly*sblz) + cblx * salx*sblz)
-      + cbcx * sbcy*(salx*sblx + calx * caly*cblx*cbly + calx * cblx*saly*sbly);
-   float crycrx = (cbcz*sbcy - cbcy * sbcx*sbcz)*(calx*caly*(cblz*sbly - cbly * sblx*sblz)
-                                                  - calx * saly*(cbly*cblz + sblx * sbly*sblz) + cblx * salx*sblz)
-      - (sbcy*sbcz + cbcy * cbcz*sbcx)*(calx*saly*(cbly*sblz - cblz * sblx*sbly)
-                                        - calx * caly*(sbly*sblz + cbly * cblz*sblx) + cblx * cblz*salx)
-      + cbcx * cbcy*(salx*sblx + calx * caly*cblx*cbly + calx * cblx*saly*sbly);
-   acy = atan2(srycrx / acx.cos(), crycrx / acx.cos());
-
-   float srzcrx = sbcx * (cblx*cbly*(calz*saly - caly * salx*salz) - cblx * sbly*(caly*calz + salx * saly*salz) + calx * salz*sblx)
-      - cbcx * cbcz*((caly*calz + salx * saly*salz)*(cbly*sblz - cblz * sblx*sbly)
-                     + (calz*saly - caly * salx*salz)*(sbly*sblz + cbly * cblz*sblx)
-                     - calx * cblx*cblz*salz)
-      + cbcx * sbcz*((caly*calz + salx * saly*salz)*(cbly*cblz + sblx * sbly*sblz)
-                     + (calz*saly - caly * salx*salz)*(cblz*sbly - cbly * sblx*sblz)
-                     + calx * cblx*salz*sblz);
-   float crzcrx = sbcx * (cblx*sbly*(caly*salz - calz * salx*saly) - cblx * cbly*(saly*salz + caly * calz*salx) + calx * calz*sblx)
-      + cbcx * cbcz*((saly*salz + caly * calz*salx)*(sbly*sblz + cbly * cblz*sblx)
-                     + (caly*salz - calz * salx*saly)*(cbly*sblz - cblz * sblx*sbly)
-                     + calx * calz*cblx*cblz)
-      - cbcx * sbcz*((saly*salz + caly * calz*salx)*(cblz*sbly - cbly * sblx*sblz)
-                     + (caly*salz - calz * salx*saly)*(cbly*cblz + sblx * sbly*sblz)
-                     - calx * calz*cblx*sblz);
-   acz = atan2(srzcrx / acx.cos(), crzcrx / acx.cos());
+    // Store the resulting Euler angles
+    acx = eulerAnglesAc.x();
+    acy = eulerAnglesAc.y();
+    acz = eulerAnglesAc.z();
 }
 
 void BasicLaserOdometry::accumulateRotation(
@@ -170,26 +139,26 @@ void BasicLaserOdometry::accumulateRotation(
     Angle lx, Angle ly, Angle lz,
     Angle& ox, Angle& oy, Angle& oz)
 {
-   float srx = lx.cos()*cx.cos()*ly.sin()*cz.sin()
-      - cx.cos()*cz.cos()*lx.sin()
-      - lx.cos()*ly.cos()*cx.sin();
-   ox = -asin(srx);
+    // Create rotation matrices R_c = Ry(cy) Rx(cx) Rz(cz) and
+    // R_l = Ry(ly) Rx(lx) Rz(lz)
+    const Eigen::Matrix3f rotationMatC =
+        rotationMatrixZXY(cx.rad(), cy.rad(), cz.rad());
+    const Eigen::Matrix3f rotationMatL =
+        rotationMatrixZXY(lx.rad(), ly.rad(), lz.rad());
 
-   float srycrx = lx.sin()*(cy.cos()*cz.sin() - cz.cos()*cx.sin()*cy.sin())
-      + lx.cos()*ly.sin()*(cy.cos()*cz.cos() + cx.sin()*cy.sin()*cz.sin())
-      + lx.cos()*ly.cos()*cx.cos()*cy.sin();
-   float crycrx = lx.cos()*ly.cos()*cx.cos()*cy.cos()
-      - lx.cos()*ly.sin()*(cz.cos()*cy.sin() - cy.cos()*cx.sin()*cz.sin())
-      - lx.sin()*(cy.sin()*cz.sin() + cy.cos()*cz.cos()*cx.sin());
-   oy = atan2(srycrx / ox.cos(), crycrx / ox.cos());
+    // Compose two rotation matrices
+    const Eigen::Matrix3f rotationMatO = rotationMatC * rotationMatL;
+    // Get three Euler angles from the rotation matrix above
+    Eigen::Vector3f eulerAnglesO;
+    eulerAnglesFromRotationZXY(rotationMatO,
+                               eulerAnglesO.x(),
+                               eulerAnglesO.y(),
+                               eulerAnglesO.z());
 
-   float srzcrx = cx.sin()*(lz.cos()*ly.sin() - ly.cos()*lx.sin()*lz.sin())
-      + cx.cos()*cz.sin()*(ly.cos()*lz.cos() + lx.sin()*ly.sin()*lz.sin())
-      + lx.cos()*cx.cos()*cz.cos()*lz.sin();
-   float crzcrx = lx.cos()*lz.cos()*cx.cos()*cz.cos()
-      - cx.cos()*cz.sin()*(ly.cos()*lz.sin() - lz.cos()*lx.sin()*ly.sin())
-      - cx.sin()*(ly.sin()*lz.sin() + ly.cos()*lz.cos()*lx.sin());
-   oz = atan2(srzcrx / ox.cos(), crzcrx / ox.cos());
+    // Store the resulting Euler angles
+    ox = eulerAnglesO.x();
+    oy = eulerAnglesO.y();
+    oz = eulerAnglesO.z();
 }
 
 void BasicLaserOdometry::updateIMU(
@@ -351,55 +320,52 @@ void BasicLaserOdometry::performOptimization()
 
             const float s = 1.0;
 
-            const float srx = std::sin(s * this->_transform.rot_x.rad());
-            const float crx = std::cos(s * this->_transform.rot_x.rad());
-            const float sry = std::sin(s * this->_transform.rot_y.rad());
-            const float cry = std::cos(s * this->_transform.rot_y.rad());
-            const float srz = std::sin(s * this->_transform.rot_z.rad());
-            const float crz = std::cos(s * this->_transform.rot_z.rad());
-            const float tx = s * this->_transform.pos.x();
-            const float ty = s * this->_transform.pos.y();
-            const float tz = s * this->_transform.pos.z();
+            const float posX = s * this->_transform.pos.x();
+            const float posY = s * this->_transform.pos.y();
+            const float posZ = s * this->_transform.pos.z();
+            const float rotX = s * this->_transform.rot_x.rad();
+            const float rotY = s * this->_transform.rot_y.rad();
+            const float rotZ = s * this->_transform.rot_z.rad();
 
-            float arx = (-s * crx*sry*srz*pointOri.x + s * crx*crz*sry*pointOri.y + s * srx*sry*pointOri.z
-                        + s * tx*crx*sry*srz - s * ty*crx*crz*sry - s * tz*srx*sry) * coeff.x
-                        + (s*srx*srz*pointOri.x - s * crz*srx*pointOri.y + s * crx*pointOri.z
-                        + s * ty*crz*srx - s * tz*crx - s * tx*srx*srz) * coeff.y
-                        + (s*crx*cry*srz*pointOri.x - s * crx*cry*crz*pointOri.y - s * cry*srx*pointOri.z
-                        + s * tz*cry*srx + s * ty*crx*cry*crz - s * tx*crx*cry*srz) * coeff.z;
+            // Create a rotation matrix and a translation vector from the
+            // current `_transform`, note that Euler angles are scaled and
+            // their signs are flipped
+            const Eigen::Matrix3f rotationMatTrans =
+                rotationMatrixYXZT(rotX, rotY, rotZ);
+            const Eigen::Vector3f vecTrans { posX, posY, posZ };
 
-            float ary = ((-s * crz*sry - s * cry*srx*srz)*pointOri.x
-                        + (s*cry*crz*srx - s * sry*srz)*pointOri.y - s * crx*cry*pointOri.z
-                        + tx * (s*crz*sry + s * cry*srx*srz) + ty * (s*sry*srz - s * cry*crz*srx)
-                        + s * tz*crx*cry) * coeff.x
-                        + ((s*cry*crz - s * srx*sry*srz)*pointOri.x
-                        + (s*cry*srz + s * crz*srx*sry)*pointOri.y - s * crx*sry*pointOri.z
-                        + s * tz*crx*sry - ty * (s*cry*srz + s * crz*srx*sry)
-                        - tx * (s*cry*crz - s * srx*sry*srz)) * coeff.z;
+            // Compute partial derivatives of the rotation matrix
+            const Eigen::Matrix3f rotationMatParX =
+                s * partialXFromRotationYXZT(rotX, rotY, rotZ);
+            const Eigen::Matrix3f rotationMatParY =
+                s * partialYFromRotationYXZT(rotX, rotY, rotZ);
+            const Eigen::Matrix3f rotationMatParZ =
+                s * partialZFromRotationYXZT(rotX, rotY, rotZ);
 
-            float arz = ((-s * cry*srz - s * crz*srx*sry)*pointOri.x + (s*cry*crz - s * srx*sry*srz)*pointOri.y
-                        + tx * (s*cry*srz + s * crz*srx*sry) - ty * (s*cry*crz - s * srx*sry*srz)) * coeff.x
-                        + (-s * crx*crz*pointOri.x - s * crx*srz*pointOri.y
-                        + s * ty*crx*srz + s * tx*crx*crz) * coeff.y
-                        + ((s*cry*crz*srx - s * sry*srz)*pointOri.x + (s*crz*sry + s * cry*srx*srz)*pointOri.y
-                        + tx * (s*sry*srz - s * cry*crz*srx) - ty * (s*crz*sry + s * cry*srx*srz)) * coeff.z;
+            // Create a position vector of a point
+            const Eigen::Vector3f vecPoint {
+                pointOri.x, pointOri.y, pointOri.z };
+            // Create an intermediate vector
+            const Eigen::Vector3f vecPointTrans = vecPoint - vecTrans;
 
-            float atx = -s * (cry*crz - srx * sry*srz) * coeff.x + s * crx*srz * coeff.y
-                        - s * (crz*sry + cry * srx*srz) * coeff.z;
+            // Create a coefficient vector
+            const Eigen::Vector3f vecCoeff { coeff.x, coeff.y, coeff.z };
+            // Compute a partial derivative of the point-to-edge or
+            // point-to-plane distance with respect to the translation
+            const Eigen::Vector3f vecGradTrans =
+                -s * rotationMatTrans.transpose() * vecCoeff;
+            // Compute a partial derivative of the point-to-edge or
+            // point-to-plane distance with respect to the rotation
+            const Eigen::Vector3f vecGradRot {
+                (rotationMatParX * vecPointTrans).transpose() * vecCoeff,
+                (rotationMatParY * vecPointTrans).transpose() * vecCoeff,
+                (rotationMatParZ * vecPointTrans).transpose() * vecCoeff };
 
-            float aty = -s * (cry*srz + crz * srx*sry) * coeff.x - s * crx*crz * coeff.y
-                        - s * (sry*srz - cry * crz*srx) * coeff.z;
+            // Point-to-edge or point-to-line distance
+            const float d2 = coeff.intensity;
 
-            float atz = s * crx*sry * coeff.x - s * srx * coeff.y - s * crx*cry * coeff.z;
-
-            float d2 = coeff.intensity;
-
-            matA(i, 0) = arx;
-            matA(i, 1) = ary;
-            matA(i, 2) = arz;
-            matA(i, 3) = atx;
-            matA(i, 4) = aty;
-            matA(i, 5) = atz;
+            matA.block<1, 3>(i, 0) = vecGradRot;
+            matA.block<1, 3>(i, 3) = vecGradTrans;
             // Reverse the sign of the residual to follow Gauss-Newton method
             matB(i, 0) = -0.05 * d2;
         }
