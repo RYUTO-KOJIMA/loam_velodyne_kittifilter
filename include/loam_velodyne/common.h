@@ -40,6 +40,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <pcl/filters/filter.h>
 #include <pcl/point_types.h>
 
 namespace loam {
@@ -67,6 +68,14 @@ inline void publishCloudMsg(ros::Publisher& publisher,
     msg.header.stamp = stamp;
     msg.header.frame_id = frameId;
     publisher.publish(msg);
+}
+
+template <typename PointT>
+inline void removeNaNFromPointCloud(
+    typename pcl::PointCloud<PointT>::Ptr& cloud)
+{
+    pcl::Indices indices;
+    pcl::removeNaNFromPointCloud<PointT>(*cloud, *cloud, indices);
 }
 
 inline double toSec(Time::duration duration)

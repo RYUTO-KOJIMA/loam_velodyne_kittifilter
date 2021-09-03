@@ -2,6 +2,7 @@
 // BasicLaserOdometry.cpp
 
 #include "loam_velodyne/BasicLaserOdometry.h"
+#include "loam_velodyne/common.h"
 #include "loam_velodyne/Transform.hpp"
 #include "math_utils.h"
 
@@ -265,9 +266,7 @@ void BasicLaserOdometry::process()
 // Perform the Gauss-Newton optimization and update the pose transformation
 void BasicLaserOdometry::performOptimization()
 {
-    std::vector<int> indices;
-    pcl::removeNaNFromPointCloud(
-        *this->_cornerPointsSharp, *this->_cornerPointsSharp, indices);
+    removeNaNFromPointCloud<pcl::PointXYZI>(this->_cornerPointsSharp);
 
     bool isDegenerate = false;
     Eigen::Matrix<float, 6, 6> matP;
@@ -546,9 +545,7 @@ void BasicLaserOdometry::findCornerCorrespondence()
     this->_pointSearchCornerInd1.resize(cornerPointsSharpNum);
     this->_pointSearchCornerInd2.resize(cornerPointsSharpNum);
 
-    std::vector<int> indices;
-    pcl::removeNaNFromPointCloud(
-        *this->_lastCornerCloud, *this->_lastCornerCloud, indices);
+    removeNaNFromPointCloud<pcl::PointXYZI>(this->_lastCornerCloud);
 
     std::vector<int> pointSearchInd;
     std::vector<float> pointSearchSqDis;
