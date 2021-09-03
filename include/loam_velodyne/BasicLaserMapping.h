@@ -1,4 +1,6 @@
-#pragma once 
+
+// BasicLaserMapping.h
+
 // Copyright 2013, Ji Zhang, Carnegie Mellon University
 // Further contributions copyright (c) 2016, Southwest Research Institute
 // All rights reserved.
@@ -31,161 +33,217 @@
 //   J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time.
 //     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
 
+#pragma once
 
-#include "common.h"
-#include "Twist.h"
-#include "CircularBuffer.h"
+#include "loam_velodyne/common.h"
+#include "loam_velodyne/Twist.h"
+#include "loam_velodyne/CircularBuffer.h"
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/filters/voxel_grid.h>
 
-namespace loam
+namespace loam {
+
+/* IMU state data. */
+struct IMUState2
 {
+    /* The time of the measurement leading to this state (in seconds). */
+    Time stamp;
+    /* The current roll angle. */
+    Angle roll;
+    /* The current pitch angle. */
+    Angle pitch;
 
-/** IMU state data. */
-typedef struct IMUState2
-{
-   /** The time of the measurement leading to this state (in seconds). */
-   Time stamp;
-
-   /** The current roll angle. */
-   Angle roll;
-
-   /** The current pitch angle. */
-   Angle pitch;
-
-   /** \brief Interpolate between two IMU states.
-    *
-    * @param start the first IMU state
-    * @param end the second IMU state
-    * @param ratio the interpolation ratio
-    * @param result the target IMU state for storing the interpolation result
-    */
-   static void interpolate(const IMUState2& start,
-                           const IMUState2& end,
-                           const float& ratio,
-                           IMUState2& result)
-   {
-      float invRatio = 1 - ratio;
-
-      result.roll = start.roll.rad() * invRatio + end.roll.rad() * ratio;
-      result.pitch = start.pitch.rad() * invRatio + end.pitch.rad() * ratio;
-   };
-} IMUState2;
+    /** \brief Interpolate between two IMU states.
+     *
+     * @param start The first IMU state
+     * @param end The second IMU state
+     * @param ratio The interpolation ratio
+     * @param result The target IMU state for storing the interpolation result
+     */
+    static void interpolate(const IMUState2& start, const IMUState2& end,
+                            const float ratio, IMUState2& result)
+    {
+        const float invRatio = 1.0f - ratio;
+        result.roll = start.roll.rad() * invRatio + end.roll.rad() * ratio;
+        result.pitch = start.pitch.rad() * invRatio + end.pitch.rad() * ratio;
+    }
+};
 
 class BasicLaserMapping
 {
 public:
-   explicit BasicLaserMapping(const float& scanPeriod = 0.1, const size_t& maxIterations = 10);
+    BasicLaserMapping(const float scanPeriod = 0.1f,
+                      const std::size_t maxIterations = 10);
 
-   /** \brief Try to process buffered data. */
-   bool process(Time const& laserOdometryTime);
-   void updateIMU(IMUState2 const& newState);
-   void updateOdometry(double pitch, double yaw, double roll, double x, double y, double z);
-   void updateOdometry(Twist const& twist);
+    /** \brief Try to process buffered data. */
+    bool process(const Time& laserOdometryTime);
+    void updateIMU(const IMUState2& newState);
+    void updateOdometry(double pitch, double yaw, double roll,
+                        double x, double y, double z);
+    void updateOdometry(const Twist& twist);
 
-   auto& laserCloud() { return *_laserCloudFullRes; }
-   auto& laserCloudCornerLast() { return *_laserCloudCornerLast; }
-   auto& laserCloudSurfLast() { return *_laserCloudSurfLast; }
+    auto& laserCloud() { return *this->_laserCloudFullRes; }
+    auto& laserCloudCornerLast() { return *this->_laserCloudCornerLast; }
+    auto& laserCloudSurfLast() { return *this->_laserCloudSurfLast; }
 
-   void setScanPeriod(float val) { _scanPeriod = val; }
-   void setMaxIterations(size_t val) { _maxIterations = val; }
-   void setDeltaTAbort(float val) { _deltaTAbort = val; }
-   void setDeltaRAbort(float val) { _deltaRAbort = val; }
+    void setScanPeriod(float val) { this->_scanPeriod = val; }
+    void setMaxIterations(size_t val) { this->_maxIterations = val; }
+    void setDeltaTAbort(float val) { this->_deltaTAbort = val; }
+    void setDeltaRAbort(float val) { this->_deltaRAbort = val; }
 
-   auto& downSizeFilterCorner() { return _downSizeFilterCorner; }
-   auto& downSizeFilterSurf() { return _downSizeFilterSurf; }
-   auto& downSizeFilterMap() { return _downSizeFilterMap; }
+    auto& downSizeFilterCorner() { return this->_downSizeFilterCorner; }
+    auto& downSizeFilterSurf() { return this->_downSizeFilterSurf; }
+    auto& downSizeFilterMap() { return this->_downSizeFilterMap; }
 
-   auto frameCount()    const { return _frameCount; }
-   auto scanPeriod()    const { return _scanPeriod; }
-   auto maxIterations() const { return _maxIterations; }
-   auto deltaTAbort()   const { return _deltaTAbort; }
-   auto deltaRAbort()   const { return _deltaRAbort; }
+    auto frameCount() const { return this->_frameCount; }
+    auto scanPeriod() const { return this->_scanPeriod; }
+    auto maxIterations() const { return this->_maxIterations; }
+    auto deltaTAbort() const { return this->_deltaTAbort; }
+    auto deltaRAbort() const { return this->_deltaRAbort; }
 
-   auto const& transformAftMapped()   const { return _transformAftMapped; }
-   auto const& transformBefMapped()   const { return _transformBefMapped; }
-   auto const& laserCloudSurroundDS() const { return *_laserCloudSurroundDS; }
+    const auto& transformAftMapped() const
+    { return this->_transformAftMapped; }
+    const auto& transformBefMapped() const
+    { return this->_transformBefMapped; }
+    const auto& laserCloudSurroundDS() const
+    { return *this->_laserCloudSurroundDS; }
 
-   bool hasFreshMap() const { return _downsizedMapCreated; }
-
-private:
-   /** Run an optimization. */
-   void optimizeTransformTobeMapped();
-
-   void transformAssociateToMap();
-   void transformUpdate();
-   void pointAssociateToMap(const pcl::PointXYZI& pi, pcl::PointXYZI& po);
-   void pointAssociateTobeMapped(const pcl::PointXYZI& pi, pcl::PointXYZI& po);
-   void transformFullResToMap();
-
-   bool createDownsizedMap();
-
-   // private:
-   size_t toIndex(int i, int j, int k) const
-   { return i + _laserCloudWidth * j + _laserCloudWidth * _laserCloudHeight * k; }
+    inline bool hasFreshMap() const { return this->_downsizedMapCreated; }
 
 private:
-   Time _laserOdometryTime;
+    /* Run an optimization. */
+    void optimizeTransformTobeMapped();
 
-   float _scanPeriod;          ///< time per scan
-   const int _stackFrameNum;
-   const int _mapFrameNum;
-   long _frameCount;
-   long _mapFrameCount;
+    void transformAssociateToMap();
+    void transformUpdate();
 
-   size_t _maxIterations;  ///< maximum number of iterations
-   float _deltaTAbort;     ///< optimization abort threshold for deltaT
-   float _deltaRAbort;     ///< optimization abort threshold for deltaR
+    // Transform the input point `pi` in the scan coordinate at t_(k + 2) to
+    // the point `po` in the mapped coordinate frame, where t_(k + 2) is the
+    // timestamp of the end of the sweep at t_(k + 1)
+    void pointAssociateToMap(const pcl::PointXYZI& pi, pcl::PointXYZI& po);
+    // Transform the input point `pi` in the mapped coordinate frame to the
+    // point `po` in the scan coordinate at t_(k + 2), where t_(k + 2) is the
+    // timestamp of the next scan (end time of the current scan)
+    void pointAssociateTobeMapped(const pcl::PointXYZI& pi, pcl::PointXYZI& po);
 
-   int _laserCloudCenWidth;
-   int _laserCloudCenHeight;
-   int _laserCloudCenDepth;
-   const size_t _laserCloudWidth;
-   const size_t _laserCloudHeight;
-   const size_t _laserCloudDepth;
-   const size_t _laserCloudNum;
+    void transformFullResToMap();
 
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudCornerLast;   ///< last corner points cloud
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurfLast;     ///< last surface points cloud
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudFullRes;      ///< last full resolution cloud
+    bool createDownsizedMap();
 
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudCornerStack;
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurfStack;
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudCornerStackDS;  ///< down sampled
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurfStackDS;    ///< down sampled
+    /* Compute a flattened index from the voxel index */
+    inline std::size_t toIndex(int i, int j, int k) const
+    { return i + this->_laserCloudWidth * j
+               + this->_laserCloudWidth * this->_laserCloudHeight * k; }
 
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurround;
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurroundDS;     ///< down sampled
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudCornerFromMap;
-   pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurfFromMap;
+private:
+    Time _laserOdometryTime;
 
-   pcl::PointCloud<pcl::PointXYZI> _laserCloudOri;
-   pcl::PointCloud<pcl::PointXYZI> _coeffSel;
+    // Time between the consecutive scans
+    float _scanPeriod;
+    // Number of frames to skip
+    const int _stackFrameNum;
+    // Interval of the computation of the map of the surrounding
+    const int _mapFrameNum;
+    // Number of the frames processed
+    long _frameCount;
+    // Number of the frames processed since the last update of the map
+    // of the surrounding
+    long _mapFrameCount;
 
-   std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> _laserCloudCornerArray;
-   std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> _laserCloudSurfArray;
-   std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> _laserCloudCornerDSArray;  ///< down sampled
-   std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> _laserCloudSurfDSArray;    ///< down sampled
+    // Maximum number of iterations
+    std::size_t _maxIterations;
+    // Optimization abort threshold for deltaT
+    float _deltaTAbort;
+    // Optimization abort threshold for deltaR
+    float _deltaRAbort;
 
-   std::vector<size_t> _laserCloudValidInd;
-   std::vector<size_t> _laserCloudSurroundInd;
+    // Coordinate of the voxel at the map center
+    int _laserCloudCenWidth;
+    // Coordinate of the voxel at the map center
+    int _laserCloudCenHeight;
+    // Coordinate of the voxel at the map center
+    int _laserCloudCenDepth;
+    // Width of the map in the number of voxels
+    const std::size_t _laserCloudWidth;
+    // Height of the map in the number of voxels
+    const std::size_t _laserCloudHeight;
+    // Depth of the map in the number of voxels
+    const std::size_t _laserCloudDepth;
+    // Number of the voxels in the map
+    const std::size_t _laserCloudNum;
 
-   Twist _transformSum, _transformIncre, _transformTobeMapped, _transformBefMapped, _transformAftMapped;
+    // Last corner point cloud
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudCornerLast;
+    // Last surface point cloud
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurfLast;
+    // Last full resolution cloud
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudFullRes;
 
-   CircularBuffer<IMUState2> _imuHistory;    ///< history of IMU states
+    // Last corner point cloud projected to the mapped coordinate frame
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudCornerStack;
+    // Last surface point cloud projected to the mapped coordinate frame
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurfStack;
+    // Last corner point cloud downsampled for the pose optimization
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudCornerStackDS;
+    // Last surface point cloud downsampled for the pose optimization
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurfStackDS;
 
-   pcl::VoxelGrid<pcl::PointXYZI> _downSizeFilterCorner;   ///< voxel filter for down sizing corner clouds
-   pcl::VoxelGrid<pcl::PointXYZI> _downSizeFilterSurf;     ///< voxel filter for down sizing surface clouds
-   pcl::VoxelGrid<pcl::PointXYZI> _downSizeFilterMap;      ///< voxel filter for down sizing accumulated map
+    // Point cloud in the voxels in the field of view
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurround;
+    // Point cloud in the voxels in the field of view downsampled for
+    // computing the map of the surrounding
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurroundDS;
+    // Corner point cloud in the voxels in the field of view used for
+    // pose optimization
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudCornerFromMap;
+    // Surface point cloud in the voxels in the field of view used for
+    // pose optimization
+    pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudSurfFromMap;
 
-   bool _downsizedMapCreated = false;
+    // Point coordinates for pose optimization, where each coordinate is
+    // in the local coordinate frame
+    pcl::PointCloud<pcl::PointXYZI> _laserCloudOri;
+    // Coefficients for pose optimization
+    pcl::PointCloud<pcl::PointXYZI> _coeffSel;
+
+    // Map with voxels for the corner point cloud around the current pose
+    std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> _laserCloudCornerArray;
+    // Map with voxels for the surface point cloud around the current pose
+    std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> _laserCloudSurfArray;
+    // Voxels for downsampled corner point cloud
+    std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> _laserCloudCornerDSArray;
+    // Voxels for downsampled surface point cloud
+    std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> _laserCloudSurfDSArray;
+
+    // Indices of the voxels in the field of view
+    std::vector<std::size_t> _laserCloudValidInd;
+    // Indices of the voxels around the current pose
+    std::vector<std::size_t> _laserCloudSurroundInd;
+
+    // Current odometry pose
+    Twist _transformSum;
+    // Update of the odometry pose
+    Twist _transformIncre;
+    // Current pose computed by the mapping
+    Twist _transformTobeMapped;
+    // Previous odometry pose
+    Twist _transformBefMapped;
+    // Previous pose computed by the mapping
+    Twist _transformAftMapped;
+
+    // History of IMU states
+    CircularBuffer<IMUState2> _imuHistory;
+
+    // Voxel filter for downsizing corner clouds
+    pcl::VoxelGrid<pcl::PointXYZI> _downSizeFilterCorner;
+    // Voxel filter for downsizing surface clouds
+    pcl::VoxelGrid<pcl::PointXYZI> _downSizeFilterSurf;
+    // Voxel filter for downsizing accumulated map
+    pcl::VoxelGrid<pcl::PointXYZI> _downSizeFilterMap;
+
+    bool _downsizedMapCreated = false;
 };
 
-} // end namespace loam
-
-
-
-
-
+} // namespace loam
