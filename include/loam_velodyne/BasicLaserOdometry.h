@@ -74,6 +74,14 @@ private:
                             Angle lx, Angle ly, Angle lz,
                             Angle& ox, Angle& oy, Angle& oz);
 
+    // Perform the Gauss-Newton optimization and update the pose transformation
+    void performOptimization();
+
+    // Check the occurrence of the degeneration
+    bool checkDegeneration(
+        const Eigen::Matrix<float, 6, 6>& hessianMat,
+        Eigen::Matrix<float, 6, 6>& projectionMat) const;
+
     // Compute the distances and coefficients from the point-to-edge
     // correspondences
     void computeCornerDistances(int iterCount);

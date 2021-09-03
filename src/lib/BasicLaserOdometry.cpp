@@ -235,9 +235,6 @@ void BasicLaserOdometry::process()
         return;
     }
 
-    bool isDegenerate = false;
-    Eigen::Matrix<float, 6, 6> matP;
-
     this->_frameCount++;
 
     // Initialize the transform between the odometry poses
@@ -246,195 +243,11 @@ void BasicLaserOdometry::process()
     // `_scanPeriod`
     this->_transform.pos -= this->_imuVeloFromStart * this->_scanPeriod;
 
-    std::size_t lastCornerCloudSize = this->_lastCornerCloud->points.size();
-    std::size_t lastSurfaceCloudSize = this->_lastSurfaceCloud->points.size();
-
-    if (lastCornerCloudSize > 10 && lastSurfaceCloudSize > 100) {
-        std::vector<int> indices;
-        pcl::removeNaNFromPointCloud(
-            *this->_cornerPointsSharp, *this->_cornerPointsSharp, indices);
-
-        // Perform iterations of the Gauss-Newton method
-        for (std::size_t iterCount = 0;
-             iterCount < this->_maxIterations; ++iterCount) {
-            this->_laserCloudOri->clear();
-            this->_coeffSel->clear();
-
-            // Compute the distances and coefficients from the point-to-edge
-            // correspondences
-            this->computeCornerDistances(iterCount);
-            // Compute the distances and coefficients from the point-to-plane
-            // correspondences
-            this->computePlaneDistances(iterCount);
-
-            // If the number of selected points is less than 10, move to the next
-            // iteration and do not perform the following optimization
-            const int pointSelNum = this->_laserCloudOri->points.size();
-
-            if (pointSelNum < 10)
-                continue;
-
-            // `matA` is the Jacobian matrix in Equation (12)
-            Eigen::Matrix<float, Eigen::Dynamic, 6> matA(pointSelNum, 6);
-            Eigen::Matrix<float, 6, Eigen::Dynamic> matAt(6, pointSelNum);
-            // `matAtA` is the Hessian matrix (J^T J) in Equation (12)
-            // Note that the damping factor is not used in this implementation
-            Eigen::Matrix<float, 6, 6> matAtA;
-            // `matB` is the distance vector (-d) in Equation (12)
-            Eigen::VectorXf matB(pointSelNum);
-            // `matAtB` is the residual vector (-J^T d) in Equation (12)
-            Eigen::Matrix<float, 6, 1> matAtB;
-            // `matX` is the solution to `matAtA` * `matX` = `matAtB`,
-            // which is used for updating the current transformation
-            Eigen::Matrix<float, 6, 1> matX;
-
-            for (int i = 0; i < pointSelNum; ++i) {
-                const auto& pointOri = this->_laserCloudOri->points[i];
-                const auto& coeff = this->_coeffSel->points[i];
-
-                const float s = 1.0;
-
-                const float srx = std::sin(s * this->_transform.rot_x.rad());
-                const float crx = std::cos(s * this->_transform.rot_x.rad());
-                const float sry = std::sin(s * this->_transform.rot_y.rad());
-                const float cry = std::cos(s * this->_transform.rot_y.rad());
-                const float srz = std::sin(s * this->_transform.rot_z.rad());
-                const float crz = std::cos(s * this->_transform.rot_z.rad());
-                const float tx = s * this->_transform.pos.x();
-                const float ty = s * this->_transform.pos.y();
-                const float tz = s * this->_transform.pos.z();
-
-                float arx = (-s * crx*sry*srz*pointOri.x + s * crx*crz*sry*pointOri.y + s * srx*sry*pointOri.z
-                            + s * tx*crx*sry*srz - s * ty*crx*crz*sry - s * tz*srx*sry) * coeff.x
-                            + (s*srx*srz*pointOri.x - s * crz*srx*pointOri.y + s * crx*pointOri.z
-                            + s * ty*crz*srx - s * tz*crx - s * tx*srx*srz) * coeff.y
-                            + (s*crx*cry*srz*pointOri.x - s * crx*cry*crz*pointOri.y - s * cry*srx*pointOri.z
-                            + s * tz*cry*srx + s * ty*crx*cry*crz - s * tx*crx*cry*srz) * coeff.z;
-
-                float ary = ((-s * crz*sry - s * cry*srx*srz)*pointOri.x
-                            + (s*cry*crz*srx - s * sry*srz)*pointOri.y - s * crx*cry*pointOri.z
-                            + tx * (s*crz*sry + s * cry*srx*srz) + ty * (s*sry*srz - s * cry*crz*srx)
-                            + s * tz*crx*cry) * coeff.x
-                            + ((s*cry*crz - s * srx*sry*srz)*pointOri.x
-                            + (s*cry*srz + s * crz*srx*sry)*pointOri.y - s * crx*sry*pointOri.z
-                            + s * tz*crx*sry - ty * (s*cry*srz + s * crz*srx*sry)
-                            - tx * (s*cry*crz - s * srx*sry*srz)) * coeff.z;
-
-                float arz = ((-s * cry*srz - s * crz*srx*sry)*pointOri.x + (s*cry*crz - s * srx*sry*srz)*pointOri.y
-                            + tx * (s*cry*srz + s * crz*srx*sry) - ty * (s*cry*crz - s * srx*sry*srz)) * coeff.x
-                            + (-s * crx*crz*pointOri.x - s * crx*srz*pointOri.y
-                            + s * ty*crx*srz + s * tx*crx*crz) * coeff.y
-                            + ((s*cry*crz*srx - s * sry*srz)*pointOri.x + (s*crz*sry + s * cry*srx*srz)*pointOri.y
-                            + tx * (s*sry*srz - s * cry*crz*srx) - ty * (s*crz*sry + s * cry*srx*srz)) * coeff.z;
-
-                float atx = -s * (cry*crz - srx * sry*srz) * coeff.x + s * crx*srz * coeff.y
-                            - s * (crz*sry + cry * srx*srz) * coeff.z;
-
-                float aty = -s * (cry*srz + crz * srx*sry) * coeff.x - s * crx*crz * coeff.y
-                            - s * (sry*srz - cry * crz*srx) * coeff.z;
-
-                float atz = s * crx*sry * coeff.x - s * srx * coeff.y - s * crx*cry * coeff.z;
-
-                float d2 = coeff.intensity;
-
-                matA(i, 0) = arx;
-                matA(i, 1) = ary;
-                matA(i, 2) = arz;
-                matA(i, 3) = atx;
-                matA(i, 4) = aty;
-                matA(i, 5) = atz;
-                // Reverse the sign of the residual to follow Gauss-Newton method
-                matB(i, 0) = -0.05 * d2;
-            }
-
-            matAt = matA.transpose();
-            matAtA = matAt * matA;
-            matAtB = matAt * matB;
-
-            // Compute the increment to the current transformation
-            matX = matAtA.colPivHouseholderQr().solve(matAtB);
-
-            // Check the occurrence of the degeneration following the paper:
-            // Ji Zhang, Michael Kaess, and Sanjiv Singh. "On Degeneracy of
-            // Optimization-based State Estimation Problems," in the
-            // Proceedings of the IEEE International Conference on Robotics
-            // and Automation (ICRA), 2016.
-            if (iterCount == 0) {
-                Eigen::Matrix<float, 1, 6> matE;
-                Eigen::Matrix<float, 6, 6> matV;
-                Eigen::Matrix<float, 6, 6> matV2;
-
-                // Compute the eigenvalues and eigenvectors of the Hessian matrix
-                Eigen::SelfAdjointEigenSolver<
-                    Eigen::Matrix<float, 6, 6>> esolver(matAtA);
-                matE = esolver.eigenvalues().real();
-                matV = esolver.eigenvectors().real();
-
-                matV2 = matV;
-
-                isDegenerate = false;
-                float eignThre[6] = { 10, 10, 10, 10, 10, 10 };
-
-                // Eigenvalues are sorted in the increasing order
-                // Detect the occurrence of the degeneration if one of the
-                // eigenvalues is less than 10
-                for (int i = 0; i < 6; ++i) {
-                    if (matE(0, i) < eignThre[i]) {
-                        matV2.row(i).setZero();
-                        isDegenerate = true;
-                    } else {
-                        break;
-                    }
-                }
-
-                // Do not update the transformation along the degenerate
-                // direction
-                matP = matV.inverse() * matV2;
-            }
-
-            if (isDegenerate) {
-                Eigen::Matrix<float, 6, 1> matX2(matX);
-                matX = matP * matX2;
-            }
-
-            // Update the transformation (rotation and translation)
-            this->_transform.rot_x = this->_transform.rot_x.rad() + matX(0, 0);
-            this->_transform.rot_y = this->_transform.rot_y.rad() + matX(1, 0);
-            this->_transform.rot_z = this->_transform.rot_z.rad() + matX(2, 0);
-            this->_transform.pos.x() += matX(3, 0);
-            this->_transform.pos.y() += matX(4, 0);
-            this->_transform.pos.z() += matX(5, 0);
-
-            // Reset the transformation if values are invalid (NaN or infinity)
-            if (!std::isfinite(this->_transform.rot_x.rad()))
-                this->_transform.rot_x = Angle();
-            if (!std::isfinite(this->_transform.rot_y.rad()))
-                this->_transform.rot_y = Angle();
-            if (!std::isfinite(this->_transform.rot_z.rad()))
-                this->_transform.rot_z = Angle();
-
-            if (!std::isfinite(this->_transform.pos.x()))
-                this->_transform.pos.x() = 0.0f;
-            if (!std::isfinite(this->_transform.pos.y()))
-                this->_transform.pos.y() = 0.0f;
-            if (!std::isfinite(this->_transform.pos.z()))
-                this->_transform.pos.z() = 0.0f;
-
-            // Compute the increment in degrees and centimeters
-            const float deltaR = std::sqrt(
-                std::pow(rad2deg(matX(0, 0)), 2)
-                + std::pow(rad2deg(matX(1, 0)), 2)
-                + std::pow(rad2deg(matX(2, 0)), 2));
-            const float deltaT = std::sqrt(
-                std::pow(matX(3, 0) * 100, 2)
-                + std::pow(matX(4, 0) * 100, 2)
-                + std::pow(matX(5, 0) * 100, 2));
-
-            // Terminate the Gauss-Newton method if the increment is small
-            if (deltaR < this->_deltaRAbort && deltaT < this->_deltaTAbort)
-                break;
-        }
-    }
+    // Perform the Gauss-Newton optimization to update the pose transformation
+    // if the previous point cloud is sufficiently large
+    if (this->_lastCornerCloud->points.size() > 10 &&
+        this->_lastSurfaceCloud->points.size() > 100)
+        this->performOptimization();
 
     // `_transformSum` is the transformation from the world coordinate frame
     // to the previous odometry frame
@@ -459,7 +272,7 @@ void BasicLaserOdometry::process()
         this->_transform.pos.y() - this->_imuShiftFromStart.y(),
         this->_transform.pos.z() * 1.05f - this->_imuShiftFromStart.z() };
     rotateZXY(v, rz, rx, ry);
-    Vector3 trans = this->_transformSum.pos - v;
+    const Vector3 trans = this->_transformSum.pos - v;
 
     // Update the rotation using IMU states at the beginning of the current
     // sweep and at the current scan to consider the nonlinear motion
@@ -481,13 +294,209 @@ void BasicLaserOdometry::process()
     this->_cornerPointsLessSharp.swap(this->_lastCornerCloud);
     this->_surfPointsLessFlat.swap(this->_lastSurfaceCloud);
 
-    lastCornerCloudSize = this->_lastCornerCloud->points.size();
-    lastSurfaceCloudSize = this->_lastSurfaceCloud->points.size();
-
-    if (lastCornerCloudSize > 10 && lastSurfaceCloudSize > 100) {
+    if (this->_lastCornerCloud->points.size() > 10 &&
+        this->_lastSurfaceCloud->points.size() > 100) {
         this->_lastCornerKDTree.setInputCloud(this->_lastCornerCloud);
         this->_lastSurfaceKDTree.setInputCloud(this->_lastSurfaceCloud);
     }
+}
+
+// Perform the Gauss-Newton optimization and update the pose transformation
+void BasicLaserOdometry::performOptimization()
+{
+    std::vector<int> indices;
+    pcl::removeNaNFromPointCloud(
+        *this->_cornerPointsSharp, *this->_cornerPointsSharp, indices);
+
+    bool isDegenerate = false;
+    Eigen::Matrix<float, 6, 6> matP;
+
+    // Perform iterations of the Gauss-Newton method
+    for (std::size_t iterCount = 0;
+         iterCount < this->_maxIterations; ++iterCount) {
+        this->_laserCloudOri->clear();
+        this->_coeffSel->clear();
+
+        // Compute the distances and coefficients from the point-to-edge
+        // correspondences
+        this->computeCornerDistances(iterCount);
+        // Compute the distances and coefficients from the point-to-plane
+        // correspondences
+        this->computePlaneDistances(iterCount);
+
+        // If the number of selected points is less than 10, move to the next
+        // iteration and do not perform the following optimization
+        const int pointSelNum = this->_laserCloudOri->points.size();
+
+        if (pointSelNum < 10)
+            continue;
+
+        // `matA` is the Jacobian matrix in Equation (12)
+        Eigen::Matrix<float, Eigen::Dynamic, 6> matA(pointSelNum, 6);
+        Eigen::Matrix<float, 6, Eigen::Dynamic> matAt(6, pointSelNum);
+        // `matAtA` is the Hessian matrix (J^T J) in Equation (12)
+        // Note that the damping factor is not used in this implementation
+        Eigen::Matrix<float, 6, 6> matAtA;
+        // `matB` is the distance vector (-d) in Equation (12)
+        Eigen::VectorXf matB(pointSelNum);
+        // `matAtB` is the residual vector (-J^T d) in Equation (12)
+        Eigen::Matrix<float, 6, 1> matAtB;
+        // `matX` is the solution to `matAtA` * `matX` = `matAtB`,
+        // which is used for updating the current transformation
+        Eigen::Matrix<float, 6, 1> matX;
+
+        for (int i = 0; i < pointSelNum; ++i) {
+            const auto& pointOri = this->_laserCloudOri->points[i];
+            const auto& coeff = this->_coeffSel->points[i];
+
+            const float s = 1.0;
+
+            const float srx = std::sin(s * this->_transform.rot_x.rad());
+            const float crx = std::cos(s * this->_transform.rot_x.rad());
+            const float sry = std::sin(s * this->_transform.rot_y.rad());
+            const float cry = std::cos(s * this->_transform.rot_y.rad());
+            const float srz = std::sin(s * this->_transform.rot_z.rad());
+            const float crz = std::cos(s * this->_transform.rot_z.rad());
+            const float tx = s * this->_transform.pos.x();
+            const float ty = s * this->_transform.pos.y();
+            const float tz = s * this->_transform.pos.z();
+
+            float arx = (-s * crx*sry*srz*pointOri.x + s * crx*crz*sry*pointOri.y + s * srx*sry*pointOri.z
+                        + s * tx*crx*sry*srz - s * ty*crx*crz*sry - s * tz*srx*sry) * coeff.x
+                        + (s*srx*srz*pointOri.x - s * crz*srx*pointOri.y + s * crx*pointOri.z
+                        + s * ty*crz*srx - s * tz*crx - s * tx*srx*srz) * coeff.y
+                        + (s*crx*cry*srz*pointOri.x - s * crx*cry*crz*pointOri.y - s * cry*srx*pointOri.z
+                        + s * tz*cry*srx + s * ty*crx*cry*crz - s * tx*crx*cry*srz) * coeff.z;
+
+            float ary = ((-s * crz*sry - s * cry*srx*srz)*pointOri.x
+                        + (s*cry*crz*srx - s * sry*srz)*pointOri.y - s * crx*cry*pointOri.z
+                        + tx * (s*crz*sry + s * cry*srx*srz) + ty * (s*sry*srz - s * cry*crz*srx)
+                        + s * tz*crx*cry) * coeff.x
+                        + ((s*cry*crz - s * srx*sry*srz)*pointOri.x
+                        + (s*cry*srz + s * crz*srx*sry)*pointOri.y - s * crx*sry*pointOri.z
+                        + s * tz*crx*sry - ty * (s*cry*srz + s * crz*srx*sry)
+                        - tx * (s*cry*crz - s * srx*sry*srz)) * coeff.z;
+
+            float arz = ((-s * cry*srz - s * crz*srx*sry)*pointOri.x + (s*cry*crz - s * srx*sry*srz)*pointOri.y
+                        + tx * (s*cry*srz + s * crz*srx*sry) - ty * (s*cry*crz - s * srx*sry*srz)) * coeff.x
+                        + (-s * crx*crz*pointOri.x - s * crx*srz*pointOri.y
+                        + s * ty*crx*srz + s * tx*crx*crz) * coeff.y
+                        + ((s*cry*crz*srx - s * sry*srz)*pointOri.x + (s*crz*sry + s * cry*srx*srz)*pointOri.y
+                        + tx * (s*sry*srz - s * cry*crz*srx) - ty * (s*crz*sry + s * cry*srx*srz)) * coeff.z;
+
+            float atx = -s * (cry*crz - srx * sry*srz) * coeff.x + s * crx*srz * coeff.y
+                        - s * (crz*sry + cry * srx*srz) * coeff.z;
+
+            float aty = -s * (cry*srz + crz * srx*sry) * coeff.x - s * crx*crz * coeff.y
+                        - s * (sry*srz - cry * crz*srx) * coeff.z;
+
+            float atz = s * crx*sry * coeff.x - s * srx * coeff.y - s * crx*cry * coeff.z;
+
+            float d2 = coeff.intensity;
+
+            matA(i, 0) = arx;
+            matA(i, 1) = ary;
+            matA(i, 2) = arz;
+            matA(i, 3) = atx;
+            matA(i, 4) = aty;
+            matA(i, 5) = atz;
+            // Reverse the sign of the residual to follow Gauss-Newton method
+            matB(i, 0) = -0.05 * d2;
+        }
+
+        matAt = matA.transpose();
+        matAtA = matAt * matA;
+        matAtB = matAt * matB;
+
+        // Compute the increment to the current transformation
+        matX = matAtA.colPivHouseholderQr().solve(matAtB);
+
+        // Check the occurrence of the degeneration
+        if (iterCount == 0)
+            isDegenerate = this->checkDegeneration(matAtA, matP);
+
+        // Do not update the transformation along the degenerate direction
+        if (isDegenerate) {
+            Eigen::Matrix<float, 6, 1> matX2(matX);
+            matX = matP * matX2;
+        }
+
+        // Update the transformation (rotation and translation)
+        this->_transform.rot_x = this->_transform.rot_x.rad() + matX(0, 0);
+        this->_transform.rot_y = this->_transform.rot_y.rad() + matX(1, 0);
+        this->_transform.rot_z = this->_transform.rot_z.rad() + matX(2, 0);
+        this->_transform.pos.x() += matX(3, 0);
+        this->_transform.pos.y() += matX(4, 0);
+        this->_transform.pos.z() += matX(5, 0);
+
+        // Reset the transformation if values are invalid (NaN or infinity)
+        if (!std::isfinite(this->_transform.rot_x.rad()))
+            this->_transform.rot_x = Angle();
+        if (!std::isfinite(this->_transform.rot_y.rad()))
+            this->_transform.rot_y = Angle();
+        if (!std::isfinite(this->_transform.rot_z.rad()))
+            this->_transform.rot_z = Angle();
+
+        if (!std::isfinite(this->_transform.pos.x()))
+            this->_transform.pos.x() = 0.0f;
+        if (!std::isfinite(this->_transform.pos.y()))
+            this->_transform.pos.y() = 0.0f;
+        if (!std::isfinite(this->_transform.pos.z()))
+            this->_transform.pos.z() = 0.0f;
+
+        // Compute the increment in degrees and centimeters
+        const float deltaR = std::sqrt(
+            std::pow(rad2deg(matX(0, 0)), 2)
+            + std::pow(rad2deg(matX(1, 0)), 2)
+            + std::pow(rad2deg(matX(2, 0)), 2));
+        const float deltaT = std::sqrt(
+            std::pow(matX(3, 0) * 100, 2)
+            + std::pow(matX(4, 0) * 100, 2)
+            + std::pow(matX(5, 0) * 100, 2));
+
+        // Terminate the Gauss-Newton method if the increment is small
+        if (deltaR < this->_deltaRAbort && deltaT < this->_deltaTAbort)
+            break;
+    }
+}
+
+// Check the occurrence of the degeneration
+bool BasicLaserOdometry::checkDegeneration(
+    const Eigen::Matrix<float, 6, 6>& hessianMat,
+    Eigen::Matrix<float, 6, 6>& projectionMat) const
+{
+    // Check the occurrence of the degeneration following the paper:
+    // Ji Zhang, Michael Kaess, and Sanjiv Singh. "On Degeneracy of
+    // Optimization-based State Estimation Problems," in the Proceedings of the
+    // IEEE International Conference on Robotics and Automation (ICRA), 2016.
+
+    // Compute the eigenvalues and eigenvectors of the Hessian matrix
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix<float, 6, 6>> eigenSolver;
+    eigenSolver.compute(hessianMat);
+
+    Eigen::Matrix<float, 1, 6> matE = eigenSolver.eigenvalues().real();
+    Eigen::Matrix<float, 6, 6> matV = eigenSolver.eigenvectors().real();
+    Eigen::Matrix<float, 6, 6> matV2 = matV;
+
+    bool isDegenerate = false;
+    const float eigenThreshold[6] = { 10, 10, 10, 10, 10, 10 };
+
+    // Eigenvalues are sorted in the increasing order
+    // Detect the occurrence of the degeneration if one of the eigenvalues is
+    // less than 10
+    for (int i = 0; i < 6; ++i) {
+        if (matE(0, i) < eigenThreshold[i]) {
+            matV2.row(i).setZero();
+            isDegenerate = true;
+        } else {
+            break;
+        }
+    }
+
+    // Do not update the transformation along the degenerate direction
+    projectionMat = matV.inverse() * matV2;
+
+    return isDegenerate;
 }
 
 // Compute the distances and coefficients from the point-to-edge
