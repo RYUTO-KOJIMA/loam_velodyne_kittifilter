@@ -11,14 +11,6 @@
 
 namespace loam {
 
-using std::sin;
-using std::cos;
-using std::asin;
-using std::atan2;
-using std::sqrt;
-using std::fabs;
-using std::pow;
-
 BasicLaserOdometry::BasicLaserOdometry(
     float scanPeriod, std::size_t maxIterations) :
     _scanPeriod(scanPeriod),
