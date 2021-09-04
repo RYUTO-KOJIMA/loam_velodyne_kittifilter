@@ -521,16 +521,16 @@ void BasicLaserOdometry::computeCornerDistances(int iterCount)
         // with distances larger than the threshold (Section V.D)
         const float s = iterCount < 5 ? 1.0f : (1.0f - 1.8f * std::fabs(ld2));
 
+        if (s <= 0.1f || ld2 == 0.0f)
+            continue;
+
+        // Store the coefficient vector and the original point `i`
+        // that is not reprojected to the beginning of the current sweep
         pcl::PointXYZI coeff;
         coeff.x = s * vecNormal.x();
         coeff.y = s * vecNormal.y();
         coeff.z = s * vecNormal.z();
         coeff.intensity = s * ld2;
-
-        // Store the coefficient vector and the original point `i`
-        // that is not reprojected to the beginning of the current sweep
-        if (s <= 0.1f || ld2 == 0.0f)
-            continue;
 
         this->_laserCloudOri->push_back(this->_cornerPointsSharp->points[i]);
         this->_coeffSel->push_back(coeff);
@@ -718,16 +718,16 @@ void BasicLaserOdometry::computePlaneDistances(int iterCount)
             (1.0f - 1.8f * std::fabs(pd2)
             / std::sqrt(calcPointDistance(pointSel)));
 
+        if (s <= 0.1f || pd2 == 0.0f)
+            continue;
+
+        // Store the coefficient vector and the original point `i`
+        // that is not reprojected to the beginning of the current sweep
         pcl::PointXYZI coeff;
         coeff.x = s * vecNormal.x();
         coeff.y = s * vecNormal.y();
         coeff.z = s * vecNormal.z();
         coeff.intensity = s * pd2;
-
-        // Store the coefficient vector and the original point `i`
-        // that is not reprojected to the beginning of the current sweep
-        if (s <= 0.1f || pd2 == 0.0f)
-            continue;
 
         this->_laserCloudOri->push_back(this->_surfPointsFlat->points[i]);
         this->_coeffSel->push_back(coeff);
