@@ -132,10 +132,28 @@ private:
 
     bool createDownsizedMap();
 
-    /* Compute a flattened index from the voxel index */
+    // Compute a flattened index from the voxel index
     inline std::size_t toIndex(int i, int j, int k) const
     { return i + this->_laserCloudWidth * j
                + this->_laserCloudWidth * this->_laserCloudHeight * k; }
+
+    // Check if the voxel is inside the map
+    inline bool isVoxelInside(int i, int j, int k) const
+    { return i >= 0 && i < this->_laserCloudWidth &&
+             j >= 0 && j < this->_laserCloudHeight &&
+             k >= 0 && k < this->_laserCloudDepth; }
+
+    // Compute a voxel index from the mapped coordinate frame
+    void toVoxelIndex(const float cubeSize, const float halfCubeSize,
+                      const float tx, const float ty, const float tz,
+                      int& idxI, int& idxJ, int& idxK) const;
+
+    // Compute the distances and coefficients from the point-to-edge
+    // correspondences
+    void computeCornerDistances();
+    // Compute the distances and coefficients from the point-to-plane
+    // correspondences
+    void computePlaneDistances();
 
 private:
     Time _laserOdometryTime;

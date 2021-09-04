@@ -48,6 +48,21 @@ using std::asin;
 using std::atan2;
 using std::pow;
 
+std::vector<Eigen::Vector3i> computeSurroundIndices()
+{
+    std::vector<Eigen::Vector3i> surroundIndices;
+    surroundIndices.reserve(125);
+
+    for (int i = -2; i <= 2; ++i)
+        for (int j = -2; j <= 2; ++j)
+            for (int k = -2; k <= 2; ++k)
+                surroundIndices.emplace_back(i, j, k);
+
+    return surroundIndices;
+}
+
+const std::vector<Eigen::Vector3i> kSurroundIndices = computeSurroundIndices();
+
 BasicLaserMapping::BasicLaserMapping(const float scanPeriod,
                                      const std::size_t maxIterations) :
     _scanPeriod(scanPeriod),
@@ -290,408 +305,410 @@ bool BasicLaserMapping::createDownsizedMap()
     return true;
 }
 
+/* Compute a voxel index from the mapped coordinate frame */
+void BasicLaserMapping::toVoxelIndex(
+    const float cubeSize, const float halfCubeSize,
+    const float tx, const float ty, const float tz,
+    int& idxI, int& idxJ, int& idxK) const
+{
+    const float cx = tx + halfCubeSize;
+    const float cy = ty + halfCubeSize;
+    const float cz = tz + halfCubeSize;
+
+    idxI = static_cast<int>(cx / cubeSize) + this->_laserCloudCenWidth;
+    idxJ = static_cast<int>(cy / cubeSize) + this->_laserCloudCenHeight;
+    idxK = static_cast<int>(cz / cubeSize) + this->_laserCloudCenDepth;
+
+    idxI = cx < 0.0f ? idxI - 1 : idxI;
+    idxJ = cy < 0.0f ? idxJ - 1 : idxJ;
+    idxK = cz < 0.0f ? idxK - 1 : idxK;
+}
+
 bool BasicLaserMapping::process(const Time& laserOdometryTime)
 {
-   // skip some frames?!?
-   _frameCount++;
-   if (_frameCount < _stackFrameNum)
-   {
-      return false;
-   }
-   _frameCount = 0;
-   // `_laserOdometryTime` is actually t_(k + 1) in the paper (Section VI),
-   // i.e., the timestamp of the current scan (or current sweep, since each
-   // sweep contains only one scan in this implementation)
-   _laserOdometryTime = laserOdometryTime;
+    if (++this->_frameCount < this->_stackFrameNum)
+        return false;
+    else
+        this->_frameCount = 0;
 
-   pcl::PointXYZI pointSel;
+    // `_laserOdometryTime` is actually t_(k + 1) in the paper (Section VI),
+    // i.e., the timestamp of the current scan (or current sweep, since each
+    // sweep contains only one scan in this implementation)
+    this->_laserOdometryTime = laserOdometryTime;
 
-   // relate incoming data to map
-   // Compute the poses of the scans at t_(k + 1) and t_(k + 2) in the mapped
-   // coordinate frame, i.e., `_transformAftMapped` and `_transformTobeMapped`
-   transformAssociateToMap();
+    pcl::PointXYZI pointSel;
 
-   // `_laserCloudCornerLast` and `_laserCloudSurfLast` are the sets of
-   // corner and planar points in the scan at time t_(k + 1), and points in
-   // `_laserCloudCornerLast` and `_laserCloudSurfLast` are reprojected to
-   // the t_(k + 2), and `_transformTobeMapped` is used to transform the
-   // coordinate at t_(k + 2) to the mapped coordinate frame
+    // Relate incoming data to map
+    // Compute the poses of the scans at t_(k + 1) and t_(k + 2) in the mapped
+    // coordinate frame, i.e., `_transformAftMapped` and `_transformTobeMapped`
+    this->transformAssociateToMap();
 
-   for (auto const& pt : _laserCloudCornerLast->points)
-   {
-      pointAssociateToMap(pt, pointSel);
-      _laserCloudCornerStack->push_back(pointSel);
-   }
+    // `_laserCloudCornerLast` and `_laserCloudSurfLast` are the sets of
+    // corner and planar points in the scan at time t_(k + 1), and points in
+    // `_laserCloudCornerLast` and `_laserCloudSurfLast` are reprojected to
+    // the t_(k + 2), and `_transformTobeMapped` is used to transform the
+    // coordinate at t_(k + 2) to the mapped coordinate frame
 
-   for (auto const& pt : _laserCloudSurfLast->points)
-   {
-      pointAssociateToMap(pt, pointSel);
-      _laserCloudSurfStack->push_back(pointSel);
-   }
+    for (const auto& pt : this->_laserCloudCornerLast->points) {
+        this->pointAssociateToMap(pt, pointSel);
+        this->_laserCloudCornerStack->push_back(pointSel);
+    }
 
-   pcl::PointXYZI pointOnYAxis;
-   pointOnYAxis.x = 0.0;
-   pointOnYAxis.y = 10.0;
-   pointOnYAxis.z = 0.0;
-   pointAssociateToMap(pointOnYAxis, pointOnYAxis);
+    for (const auto& pt : this->_laserCloudSurfLast->points) {
+        this->pointAssociateToMap(pt, pointSel);
+        this->_laserCloudSurfStack->push_back(pointSel);
+    }
 
-   // `CUBE_SIZE` and `CUBE_HALF` are in centimeters (50cm and 25cm)
-   auto const CUBE_SIZE = 50.0;
-   auto const CUBE_HALF = CUBE_SIZE / 2;
+    pcl::PointXYZI pointOnYAxis;
+    pointOnYAxis.x = 0.0f;
+    pointOnYAxis.y = 10.0f;
+    pointOnYAxis.z = 0.0f;
+    this->pointAssociateToMap(pointOnYAxis, pointOnYAxis);
 
-   // Compute the index of the center cube in the 10m cubic area, and
-   // each cube stores the point cloud
-   // `_laserCloudCenWidth`, `_laserCloudCenHeight`, and `_laserCloudCenDepth`
-   // are initially set to 10, 5, and 10, respectively, and the number of
-   // the cubes, i.e., `_laserCloudWidth`, `_laserCloudHeight`, and
-   // `_laserCloudDepth` are initially set to 21, 11, and 21
-   int centerCubeI = int((_transformTobeMapped.pos.x() + CUBE_HALF) / CUBE_SIZE) + _laserCloudCenWidth;
-   int centerCubeJ = int((_transformTobeMapped.pos.y() + CUBE_HALF) / CUBE_SIZE) + _laserCloudCenHeight;
-   int centerCubeK = int((_transformTobeMapped.pos.z() + CUBE_HALF) / CUBE_SIZE) + _laserCloudCenDepth;
+    // `CUBE_SIZE` and `CUBE_HALF` are in centimeters (50cm and 25cm)
+    const auto CUBE_SIZE = 50.0f;
+    const auto CUBE_HALF = CUBE_SIZE / 2.0f;
 
-   if (_transformTobeMapped.pos.x() + CUBE_HALF < 0) centerCubeI--;
-   if (_transformTobeMapped.pos.y() + CUBE_HALF < 0) centerCubeJ--;
-   if (_transformTobeMapped.pos.z() + CUBE_HALF < 0) centerCubeK--;
+    // Compute the index of the center cube in the 10.5x5.5x10.5m cubic area,
+    // and each cube stores the point cloud
+    // `_laserCloudCenWidth`, `_laserCloudCenHeight`, and `_laserCloudCenDepth`
+    // are initially set to 10, 5, and 10, respectively, and the number of
+    // the cubes, i.e., `_laserCloudWidth`, `_laserCloudHeight`, and
+    // `_laserCloudDepth` are initially set to 21, 11, and 21
+    Eigen::Vector3i centerCubeIdx;
+    this->toVoxelIndex(CUBE_SIZE, CUBE_HALF,
+                       this->_transformTobeMapped.pos.x(),
+                       this->_transformTobeMapped.pos.y(),
+                       this->_transformTobeMapped.pos.z(),
+                       centerCubeIdx.x(),
+                       centerCubeIdx.y(),
+                       centerCubeIdx.z());
 
-   // Slide the cubes in `_laserCloudCornerArray` and `_laserCloudSurfArray`
-   // along X axis to constrain the `centerCubeI` to be within the range of
-   // [3, `_laserCloudWidth` - 3)
-   while (centerCubeI < 3)
-   {
-      for (int j = 0; j < _laserCloudHeight; j++)
-      {
-         for (int k = 0; k < _laserCloudDepth; k++)
-         {
-            for (int i = _laserCloudWidth - 1; i >= 1; i--)
-            {
-               const size_t indexA = toIndex(i, j, k);
-               const size_t indexB = toIndex(i - 1, j, k);
-               std::swap(_laserCloudCornerArray[indexA], _laserCloudCornerArray[indexB]);
-               std::swap(_laserCloudSurfArray[indexA], _laserCloudSurfArray[indexB]);
+    // Slide the cubes in `_laserCloudCornerArray` and `_laserCloudSurfArray`
+    // along X axis to constrain the `centerCubeIdx.x()` to be within the range
+    // of [3, `_laserCloudWidth` - 3)
+    while (centerCubeIdx.x() < 3) {
+        for (int j = 0; j < this->_laserCloudHeight; ++j) {
+            for (int k = 0; k < this->_laserCloudDepth; ++k) {
+                for (int i = this->_laserCloudWidth - 1; i >= 1; --i) {
+                    const std::size_t indexA = this->toIndex(i, j, k);
+                    const std::size_t indexB = this->toIndex(i - 1, j, k);
+                    /* Only the pointers are swapped */
+                    std::swap(this->_laserCloudCornerArray[indexA],
+                              this->_laserCloudCornerArray[indexB]);
+                    std::swap(this->_laserCloudSurfArray[indexA],
+                              this->_laserCloudSurfArray[indexB]);
+                }
+                const std::size_t indexC = this->toIndex(0, j, k);
+                this->_laserCloudCornerArray[indexC]->clear();
+                this->_laserCloudSurfArray[indexC]->clear();
             }
-            const size_t indexC = toIndex(0, j, k);
-            _laserCloudCornerArray[indexC]->clear();
-            _laserCloudSurfArray[indexC]->clear();
-         }
-      }
-      centerCubeI++;
-      _laserCloudCenWidth++;
-   }
+        }
+        ++centerCubeIdx.x();
+        ++this->_laserCloudCenWidth;
+    }
 
-   while (centerCubeI >= _laserCloudWidth - 3)
-   {
-      for (int j = 0; j < _laserCloudHeight; j++)
-      {
-         for (int k = 0; k < _laserCloudDepth; k++)
-         {
-            for (int i = 0; i < _laserCloudWidth - 1; i++)
-            {
-               const size_t indexA = toIndex(i, j, k);
-               const size_t indexB = toIndex(i + 1, j, k);
-               std::swap(_laserCloudCornerArray[indexA], _laserCloudCornerArray[indexB]);
-               std::swap(_laserCloudSurfArray[indexA], _laserCloudSurfArray[indexB]);
+    while (centerCubeIdx.x() >= this->_laserCloudWidth - 3) {
+        for (int j = 0; j < this->_laserCloudHeight; ++j) {
+            for (int k = 0; k < this->_laserCloudDepth; ++k) {
+                for (int i = 0; i < this->_laserCloudWidth - 1; ++i) {
+                    const std::size_t indexA = this->toIndex(i, j, k);
+                    const std::size_t indexB = this->toIndex(i + 1, j, k);
+                    std::swap(this->_laserCloudCornerArray[indexA],
+                              this->_laserCloudCornerArray[indexB]);
+                    std::swap(this->_laserCloudSurfArray[indexA],
+                              this->_laserCloudSurfArray[indexB]);
+                }
+                const std::size_t indexC =
+                    this->toIndex(this->_laserCloudWidth - 1, j, k);
+                this->_laserCloudCornerArray[indexC]->clear();
+                this->_laserCloudSurfArray[indexC]->clear();
             }
-            const size_t indexC = toIndex(_laserCloudWidth - 1, j, k);
-            _laserCloudCornerArray[indexC]->clear();
-            _laserCloudSurfArray[indexC]->clear();
-         }
-      }
-      centerCubeI--;
-      _laserCloudCenWidth--;
-   }
+        }
+        --centerCubeIdx.x();
+        --this->_laserCloudCenWidth;
+    }
 
-   // Slide the cubes in `_laserCloudCornerArray` and `_laserCloudSurfArray`
-   // along Y axis to constrain the `centerCubeJ` to be within the range of
-   // [3, `_laserCloudHeight` - 3)
-   while (centerCubeJ < 3)
-   {
-      for (int i = 0; i < _laserCloudWidth; i++)
-      {
-         for (int k = 0; k < _laserCloudDepth; k++)
-         {
-            for (int j = _laserCloudHeight - 1; j >= 1; j--)
-            {
-               const size_t indexA = toIndex(i, j, k);
-               const size_t indexB = toIndex(i, j - 1, k);
-               std::swap(_laserCloudCornerArray[indexA], _laserCloudCornerArray[indexB]);
-               std::swap(_laserCloudSurfArray[indexA], _laserCloudSurfArray[indexB]);
+    // Slide the cubes in `_laserCloudCornerArray` and `_laserCloudSurfArray`
+    // along Y axis to constrain the `centerCubeIdx.y()` to be within the range
+    // of [3, `_laserCloudHeight` - 3)
+    while (centerCubeIdx.y() < 3) {
+        for (int i = 0; i < this->_laserCloudWidth; ++i) {
+            for (int k = 0; k < this->_laserCloudDepth; ++k) {
+                for (int j = this->_laserCloudHeight - 1; j >= 1; --j) {
+                    const std::size_t indexA = this->toIndex(i, j, k);
+                    const std::size_t indexB = this->toIndex(i, j - 1, k);
+                    std::swap(this->_laserCloudCornerArray[indexA],
+                              this->_laserCloudCornerArray[indexB]);
+                    std::swap(this->_laserCloudSurfArray[indexA],
+                              this->_laserCloudSurfArray[indexB]);
+                }
+                const std::size_t indexC = this->toIndex(i, 0, k);
+                this->_laserCloudCornerArray[indexC]->clear();
+                this->_laserCloudSurfArray[indexC]->clear();
             }
-            const size_t indexC = toIndex(i, 0, k);
-            _laserCloudCornerArray[indexC]->clear();
-            _laserCloudSurfArray[indexC]->clear();
-         }
-      }
-      centerCubeJ++;
-      _laserCloudCenHeight++;
-   }
+        }
+        ++centerCubeIdx.y();
+        ++this->_laserCloudCenHeight;
+    }
 
-   while (centerCubeJ >= _laserCloudHeight - 3)
-   {
-      for (int i = 0; i < _laserCloudWidth; i++)
-      {
-         for (int k = 0; k < _laserCloudDepth; k++)
-         {
-            for (int j = 0; j < _laserCloudHeight - 1; j++)
-            {
-               const size_t indexA = toIndex(i, j, k);
-               const size_t indexB = toIndex(i, j + 1, k);
-               std::swap(_laserCloudCornerArray[indexA], _laserCloudCornerArray[indexB]);
-               std::swap(_laserCloudSurfArray[indexA], _laserCloudSurfArray[indexB]);
+    while (centerCubeIdx.y() >= this->_laserCloudHeight - 3) {
+        for (int i = 0; i < this->_laserCloudWidth; ++i) {
+            for (int k = 0; k < this->_laserCloudDepth; ++k) {
+                for (int j = 0; j < this->_laserCloudHeight - 1; ++j) {
+                    const std::size_t indexA = this->toIndex(i, j, k);
+                    const std::size_t indexB = this->toIndex(i, j + 1, k);
+                    std::swap(this->_laserCloudCornerArray[indexA],
+                              this->_laserCloudCornerArray[indexB]);
+                    std::swap(this->_laserCloudSurfArray[indexA],
+                              this->_laserCloudSurfArray[indexB]);
+                }
+                const std::size_t indexC =
+                    this->toIndex(i, this->_laserCloudHeight - 1, k);
+                this->_laserCloudCornerArray[indexC]->clear();
+                this->_laserCloudSurfArray[indexC]->clear();
             }
-            const size_t indexC = toIndex(i, _laserCloudHeight - 1, k);
-            _laserCloudCornerArray[indexC]->clear();
-            _laserCloudSurfArray[indexC]->clear();
-         }
-      }
-      centerCubeJ--;
-      _laserCloudCenHeight--;
-   }
+        }
+        --centerCubeIdx.y();
+        --this->_laserCloudCenHeight;
+    }
 
-   // Slide the cubes in `_laserCloudCornerArray` and `_laserCloudSurfArray`
-   // along Z axis to constrain the `centerCubeK` to be within the range of
-   // [3, `_laserCloudDepth` - 3)
-   while (centerCubeK < 3)
-   {
-      for (int i = 0; i < _laserCloudWidth; i++)
-      {
-         for (int j = 0; j < _laserCloudHeight; j++)
-         {
-            for (int k = _laserCloudDepth - 1; k >= 1; k--)
-            {
-               const size_t indexA = toIndex(i, j, k);
-               const size_t indexB = toIndex(i, j, k - 1);
-               std::swap(_laserCloudCornerArray[indexA], _laserCloudCornerArray[indexB]);
-               std::swap(_laserCloudSurfArray[indexA], _laserCloudSurfArray[indexB]);
+    // Slide the cubes in `_laserCloudCornerArray` and `_laserCloudSurfArray`
+    // along Z axis to constrain the `centerCubeIdx.z()` to be within the range
+    // of [3, `_laserCloudDepth` - 3)
+    while (centerCubeIdx.z() < 3) {
+        for (int i = 0; i < this->_laserCloudWidth; ++i) {
+            for (int j = 0; j < this->_laserCloudHeight; ++j) {
+                for (int k = this->_laserCloudDepth - 1; k >= 1; --k) {
+                    const std::size_t indexA = this->toIndex(i, j, k);
+                    const std::size_t indexB = this->toIndex(i, j, k - 1);
+                    std::swap(this->_laserCloudCornerArray[indexA],
+                              this->_laserCloudCornerArray[indexB]);
+                    std::swap(this->_laserCloudSurfArray[indexA],
+                              this->_laserCloudSurfArray[indexB]);
+                }
+                const std::size_t indexC = this->toIndex(i, j, 0);
+                this->_laserCloudCornerArray[indexC]->clear();
+                this->_laserCloudSurfArray[indexC]->clear();
             }
-            const size_t indexC = toIndex(i, j, 0);
-            _laserCloudCornerArray[indexC]->clear();
-            _laserCloudSurfArray[indexC]->clear();
-         }
-      }
-      centerCubeK++;
-      _laserCloudCenDepth++;
-   }
+        }
+        ++centerCubeIdx.z();
+        ++this->_laserCloudCenDepth;
+    }
 
-   while (centerCubeK >= _laserCloudDepth - 3)
-   {
-      for (int i = 0; i < _laserCloudWidth; i++)
-      {
-         for (int j = 0; j < _laserCloudHeight; j++)
-         {
-            for (int k = 0; k < _laserCloudDepth - 1; k++)
-            {
-               const size_t indexA = toIndex(i, j, k);
-               const size_t indexB = toIndex(i, j, k + 1);
-               std::swap(_laserCloudCornerArray[indexA], _laserCloudCornerArray[indexB]);
-               std::swap(_laserCloudSurfArray[indexA], _laserCloudSurfArray[indexB]);
+    while (centerCubeIdx.z() >= this->_laserCloudDepth - 3) {
+        for (int i = 0; i < this->_laserCloudWidth; ++i) {
+            for (int j = 0; j < this->_laserCloudHeight; ++j) {
+                for (int k = 0; k < this->_laserCloudDepth - 1; ++k) {
+                    const std::size_t indexA = this->toIndex(i, j, k);
+                    const std::size_t indexB = this->toIndex(i, j, k + 1);
+                    std::swap(this->_laserCloudCornerArray[indexA],
+                              this->_laserCloudCornerArray[indexB]);
+                    std::swap(this->_laserCloudSurfArray[indexA],
+                              this->_laserCloudSurfArray[indexB]);
+                }
+                const std::size_t indexC =
+                    this->toIndex(i, j, this->_laserCloudDepth - 1);
+                this->_laserCloudCornerArray[indexC]->clear();
+                this->_laserCloudSurfArray[indexC]->clear();
             }
-            const size_t indexC = toIndex(i, j, _laserCloudDepth - 1);
-            _laserCloudCornerArray[indexC]->clear();
-            _laserCloudSurfArray[indexC]->clear();
-         }
-      }
-      centerCubeK--;
-      _laserCloudCenDepth--;
-   }
+        }
+        --centerCubeIdx.z();
+        --this->_laserCloudCenDepth;
+    }
 
-   // `_laserCloudValidInd` and `_laserCloudSurroundInd` contain 125 cube
-   // indices at most when all cubes around the center cube (i, j, k)
-   // are in the field of view, or all cubes have valid indices
-   _laserCloudValidInd.clear();
-   _laserCloudSurroundInd.clear();
-   for (int i = centerCubeI - 2; i <= centerCubeI + 2; i++)
-   {
-      for (int j = centerCubeJ - 2; j <= centerCubeJ + 2; j++)
-      {
-         for (int k = centerCubeK - 2; k <= centerCubeK + 2; k++)
-         {
-            if (i >= 0 && i < _laserCloudWidth &&
-                j >= 0 && j < _laserCloudHeight &&
-                k >= 0 && k < _laserCloudDepth)
-            {
-               // Convert the voxel index to the mapped coordinate frame
-               float centerX = 50.0f * (i - _laserCloudCenWidth);
-               float centerY = 50.0f * (j - _laserCloudCenHeight);
-               float centerZ = 50.0f * (k - _laserCloudCenDepth);
+    // `_laserCloudValidInd` and `_laserCloudSurroundInd` contain 125 cube
+    // indices at most when all cubes around the center cube (i, j, k)
+    // are in the field of view, or all cubes have valid indices
+    this->_laserCloudValidInd.clear();
+    this->_laserCloudSurroundInd.clear();
 
-               pcl::PointXYZI transform_pos = (pcl::PointXYZI) _transformTobeMapped.pos;
+    for (const auto& surroundIdx : kSurroundIndices) {
+        const int i = centerCubeIdx.x() + surroundIdx.x();
+        const int j = centerCubeIdx.y() + surroundIdx.y();
+        const int k = centerCubeIdx.z() + surroundIdx.z();
 
-               // `corner` is the corner points of the cube at index (i, j, k)
-               // in the mapped coordinate frame
-               bool isInLaserFOV = false;
-               for (int ii = -1; ii <= 1; ii += 2)
-               {
-                  for (int jj = -1; jj <= 1; jj += 2)
-                  {
-                     for (int kk = -1; kk <= 1; kk += 2)
-                     {
-                        pcl::PointXYZI corner;
-                        corner.x = centerX + 25.0f * ii;
-                        corner.y = centerY + 25.0f * jj;
-                        corner.z = centerZ + 25.0f * kk;
+        if (!this->isVoxelInside(i, j, k))
+            continue;
 
-                        float squaredSide1 = calcSquaredDiff(transform_pos, corner);
-                        float squaredSide2 = calcSquaredDiff(pointOnYAxis, corner);
+        // Convert the voxel index to the mapped coordinate frame
+        const float centerX = CUBE_SIZE * (i - this->_laserCloudCenWidth);
+        const float centerY = CUBE_SIZE * (j - this->_laserCloudCenHeight);
+        const float centerZ = CUBE_SIZE * (k - this->_laserCloudCenDepth);
 
-                        // `100.0f + squaredSide1 - squaredSide2` equals to
-                        // `2 * 10 * sqrt(squaredSide1) * cos(x)` using law of
-                        // cosines, where `x` is `90 - (vertical angle)`
+        const pcl::PointXYZI transformPos =
+            static_cast<pcl::PointXYZI>(this->_transformTobeMapped.pos);
 
-                        float check1 = 100.0f + squaredSide1 - squaredSide2
-                           - 10.0f * sqrt(3.0f) * sqrt(squaredSide1);
+        const int cornerOffsetX[8] = { -1, -1, -1, -1, 1, 1, 1, 1 };
+        const int cornerOffsetY[8] = { -1, -1, 1, 1, -1, -1, 1, 1 };
+        const int cornerOffsetZ[8] = { -1, 1, -1, 1, -1, 1, -1, 1 };
 
-                        float check2 = 100.0f + squaredSide1 - squaredSide2
-                           + 10.0f * sqrt(3.0f) * sqrt(squaredSide1);
+        // `corner` is the corner points of the cube at index (i, j, k)
+        // in the mapped coordinate frame
+        bool isInLaserFOV = false;
 
-                        // This holds if |100.0f + side1 - side2| is less than
-                        // 10.0f * sqrt(3.0f) * sqrt(side1), which means that
-                        // the vertical angle of the point is within the range
-                        // of [-60, 60] (cos(x) is less than sqrt(3) / 2
-                        // and is larger than -sqrt(3) / 2, i.e., x is larger
-                        // than 30 degrees and is less than 150 degrees)
-                        if (check1 < 0 && check2 > 0)
-                        {
-                           isInLaserFOV = true;
-                        }
-                     }
-                  }
-               }
+        for (int c = 0; c < 8; ++c) {
+            pcl::PointXYZI corner;
+            corner.x = centerX + CUBE_HALF * cornerOffsetX[c];
+            corner.y = centerY + CUBE_HALF * cornerOffsetY[c];
+            corner.z = centerZ + CUBE_HALF * cornerOffsetZ[c];
 
-               size_t cubeIdx = i + _laserCloudWidth * j + _laserCloudWidth * _laserCloudHeight * k;
-               if (isInLaserFOV)
-               {
-                  _laserCloudValidInd.push_back(cubeIdx);
-               }
-               _laserCloudSurroundInd.push_back(cubeIdx);
+            const float squaredSide1 = calcSquaredDiff(transformPos, corner);
+            const float squaredSide2 = calcSquaredDiff(pointOnYAxis, corner);
+
+            // `100.0f + squaredSide1 - squaredSide2` equals to
+            // `2 * 10 * sqrt(squaredSide1) * cos(x)` using law of
+            // cosines, where `x` is `90 - (vertical angle)`
+            const float check1 = pointOnYAxis.y * pointOnYAxis.y
+                                 + squaredSide1 - squaredSide2;
+            const float check2 = pointOnYAxis.y * std::sqrt(3.0f)
+                                 * std::sqrt(squaredSide1);
+
+            // This holds if |100.0f + side1 - side2| is less than
+            // 10.0f * sqrt(3.0f) * sqrt(side1), which means that
+            // the vertical angle of the point is within the range
+            // of [-60, 60] (cos(x) is less than sqrt(3) / 2
+            // and is larger than -sqrt(3) / 2, i.e., x is larger
+            // than 30 degrees and is less than 150 degrees)
+            if (std::abs(check1) < check2) {
+                isInLaserFOV = true;
+                break;
             }
-         }
-      }
-   }
+        }
 
-   // prepare valid map corner and surface cloud for pose optimization
-   _laserCloudCornerFromMap->clear();
-   _laserCloudSurfFromMap->clear();
-   for (auto const& ind : _laserCloudValidInd)
-   {
-      *_laserCloudCornerFromMap += *_laserCloudCornerArray[ind];
-      *_laserCloudSurfFromMap += *_laserCloudSurfArray[ind];
-   }
+        const std::size_t cubeIdx = this->toIndex(i, j, k);
 
-   // prepare feature stack clouds for pose optimization
-   // Convert the point coordinates from the mapped coordinate frame to the
-   // scan coordinate frame at t_(k + 2)
-   for (auto& pt : *_laserCloudCornerStack)
-      pointAssociateTobeMapped(pt, pt);
+        if (isInLaserFOV)
+            this->_laserCloudValidInd.push_back(cubeIdx);
 
-   for (auto& pt : *_laserCloudSurfStack)
-      pointAssociateTobeMapped(pt, pt);
+        this->_laserCloudSurroundInd.push_back(cubeIdx);
+    }
 
-   // down sample feature stack clouds
-   _laserCloudCornerStackDS->clear();
-   _downSizeFilterCorner.setInputCloud(_laserCloudCornerStack);
-   _downSizeFilterCorner.filter(*_laserCloudCornerStackDS);
-   size_t laserCloudCornerStackNum = _laserCloudCornerStackDS->size();
+    // Prepare valid map corner and surface cloud for pose optimization
+    this->_laserCloudCornerFromMap->clear();
+    this->_laserCloudSurfFromMap->clear();
 
-   _laserCloudSurfStackDS->clear();
-   _downSizeFilterSurf.setInputCloud(_laserCloudSurfStack);
-   _downSizeFilterSurf.filter(*_laserCloudSurfStackDS);
-   size_t laserCloudSurfStackNum = _laserCloudSurfStackDS->size();
+    for (const auto& ind : this->_laserCloudValidInd) {
+        *this->_laserCloudCornerFromMap += *this->_laserCloudCornerArray[ind];
+        *this->_laserCloudSurfFromMap += *this->_laserCloudSurfArray[ind];
+    }
 
-   _laserCloudCornerStack->clear();
-   _laserCloudSurfStack->clear();
+    // Prepare feature stack clouds for pose optimization
+    // Convert the point coordinates from the mapped coordinate frame to the
+    // scan coordinate frame at t_(k + 2)
+    // After `pointAssociateTobeMapped()`, `_laserCloudCornerStack` is
+    // basically the same as `_laserCloudCornerLast`
+    for (auto& pt : *this->_laserCloudCornerStack)
+        this->pointAssociateTobeMapped(pt, pt);
 
-   // run pose optimization
-   optimizeTransformTobeMapped();
+    // After `pointAssociateTobeMapped()`, `_laserCloudSurfStack` is
+    // basically the same as `_laserCloudSurfLast`
+    for (auto& pt : *this->_laserCloudSurfStack)
+        this->pointAssociateTobeMapped(pt, pt);
 
-   // store down sized corner stack points in corresponding cube clouds
-   for (int i = 0; i < laserCloudCornerStackNum; i++)
-   {
-      // Convert the point coordinates from the scan frame to the map frame
-      pointAssociateToMap(_laserCloudCornerStackDS->points[i], pointSel);
+    // Downsample feature stack clouds
+    this->_laserCloudCornerStackDS->clear();
+    this->_downSizeFilterCorner.setInputCloud(this->_laserCloudCornerStack);
+    this->_downSizeFilterCorner.filter(*this->_laserCloudCornerStackDS);
 
-      // Compute the index of the cube corresponding to the point
-      int cubeI = int((pointSel.x + CUBE_HALF) / CUBE_SIZE) + _laserCloudCenWidth;
-      int cubeJ = int((pointSel.y + CUBE_HALF) / CUBE_SIZE) + _laserCloudCenHeight;
-      int cubeK = int((pointSel.z + CUBE_HALF) / CUBE_SIZE) + _laserCloudCenDepth;
+    this->_laserCloudSurfStackDS->clear();
+    this->_downSizeFilterSurf.setInputCloud(this->_laserCloudSurfStack);
+    this->_downSizeFilterSurf.filter(*this->_laserCloudSurfStackDS);
 
-      if (pointSel.x + CUBE_HALF < 0) cubeI--;
-      if (pointSel.y + CUBE_HALF < 0) cubeJ--;
-      if (pointSel.z + CUBE_HALF < 0) cubeK--;
+    this->_laserCloudCornerStack->clear();
+    this->_laserCloudSurfStack->clear();
 
-      // Append the aligned point to the cube
-      if (cubeI >= 0 && cubeI < _laserCloudWidth &&
-          cubeJ >= 0 && cubeJ < _laserCloudHeight &&
-          cubeK >= 0 && cubeK < _laserCloudDepth)
-      {
-         size_t cubeInd = cubeI + _laserCloudWidth * cubeJ + _laserCloudWidth * _laserCloudHeight * cubeK;
-         _laserCloudCornerArray[cubeInd]->push_back(pointSel);
-      }
-   }
+    // Run pose optimization
+    this->optimizeTransformTobeMapped();
 
-   // store down sized surface stack points in corresponding cube clouds
-   for (int i = 0; i < laserCloudSurfStackNum; i++)
-   {
-      pointAssociateToMap(_laserCloudSurfStackDS->points[i], pointSel);
+    // Store downsized corner stack points in corresponding cube clouds
+    for (int i = 0; i < this->_laserCloudCornerStackDS->size(); ++i) {
+        // Convert the point coordinates from the scan frame to the map frame
+        this->pointAssociateToMap(
+            this->_laserCloudCornerStackDS->points[i], pointSel);
 
-      int cubeI = int((pointSel.x + CUBE_HALF) / CUBE_SIZE) + _laserCloudCenWidth;
-      int cubeJ = int((pointSel.y + CUBE_HALF) / CUBE_SIZE) + _laserCloudCenHeight;
-      int cubeK = int((pointSel.z + CUBE_HALF) / CUBE_SIZE) + _laserCloudCenDepth;
+        // Compute the index of the cube corresponding to the point
+        Eigen::Vector3i cubeIdx;
+        this->toVoxelIndex(CUBE_SIZE, CUBE_HALF,
+                           pointSel.x, pointSel.y, pointSel.z,
+                           cubeIdx.x(), cubeIdx.y(), cubeIdx.z());
 
-      if (pointSel.x + CUBE_HALF < 0) cubeI--;
-      if (pointSel.y + CUBE_HALF < 0) cubeJ--;
-      if (pointSel.z + CUBE_HALF < 0) cubeK--;
+        // Append the aligned point to the cube
+        if (!this->isVoxelInside(cubeIdx.x(), cubeIdx.y(), cubeIdx.z()))
+            continue;
 
-      if (cubeI >= 0 && cubeI < _laserCloudWidth &&
-          cubeJ >= 0 && cubeJ < _laserCloudHeight &&
-          cubeK >= 0 && cubeK < _laserCloudDepth)
-      {
-         size_t cubeInd = cubeI + _laserCloudWidth * cubeJ + _laserCloudWidth * _laserCloudHeight * cubeK;
-         _laserCloudSurfArray[cubeInd]->push_back(pointSel);
-      }
-   }
+        const std::size_t cubeFlatIdx =
+            this->toIndex(cubeIdx.x(), cubeIdx.y(), cubeIdx.z());
+        this->_laserCloudCornerArray[cubeFlatIdx]->push_back(pointSel);
+    }
 
-   // down size all valid (within field of view) feature cube clouds
-   for (auto const& ind : _laserCloudValidInd)
-   {
-      _laserCloudCornerDSArray[ind]->clear();
-      _downSizeFilterCorner.setInputCloud(_laserCloudCornerArray[ind]);
-      _downSizeFilterCorner.filter(*_laserCloudCornerDSArray[ind]);
+    // Store downsized surface stack points in corresponding cube clouds
+    for (int i = 0; i < this->_laserCloudSurfStackDS->size(); ++i) {
+        this->pointAssociateToMap(
+            this->_laserCloudSurfStackDS->points[i], pointSel);
 
-      _laserCloudSurfDSArray[ind]->clear();
-      _downSizeFilterSurf.setInputCloud(_laserCloudSurfArray[ind]);
-      _downSizeFilterSurf.filter(*_laserCloudSurfDSArray[ind]);
+        Eigen::Vector3i cubeIdx;
+        this->toVoxelIndex(CUBE_SIZE, CUBE_HALF,
+                           pointSel.x, pointSel.y, pointSel.z,
+                           cubeIdx.x(), cubeIdx.y(), cubeIdx.z());
 
-      // swap cube clouds for next processing
-      _laserCloudCornerArray[ind].swap(_laserCloudCornerDSArray[ind]);
-      _laserCloudSurfArray[ind].swap(_laserCloudSurfDSArray[ind]);
-   }
+        if (!this->isVoxelInside(cubeIdx.x(), cubeIdx.y(), cubeIdx.z()))
+            continue;
 
-   transformFullResToMap();
-   _downsizedMapCreated = createDownsizedMap();
+        const std::size_t cubeFlatIdx =
+            this->toIndex(cubeIdx.x(), cubeIdx.y(), cubeIdx.z());
+        this->_laserCloudSurfArray[cubeFlatIdx]->push_back(pointSel);
+    }
 
-   return true;
+    // Downsize all valid (within field of view) feature cube clouds
+    // TODO: `_laserCloudCornerDSArray` and `_laserCloudSurfDSArray` are
+    // not necessary
+    for (const auto& ind : this->_laserCloudValidInd) {
+        this->_laserCloudCornerDSArray[ind]->clear();
+        this->_downSizeFilterCorner.setInputCloud(
+            this->_laserCloudCornerArray[ind]);
+        this->_downSizeFilterCorner.filter(
+            *this->_laserCloudCornerDSArray[ind]);
+
+        this->_laserCloudSurfDSArray[ind]->clear();
+        this->_downSizeFilterSurf.setInputCloud(
+            this->_laserCloudSurfArray[ind]);
+        this->_downSizeFilterSurf.filter(
+            *this->_laserCloudSurfDSArray[ind]);
+
+        // Swap cube clouds for next processing
+        this->_laserCloudCornerArray[ind].swap(
+            this->_laserCloudCornerDSArray[ind]);
+        this->_laserCloudSurfArray[ind].swap(
+            this->_laserCloudSurfDSArray[ind]);
+    }
+
+    this->transformFullResToMap();
+    this->_downsizedMapCreated = this->createDownsizedMap();
+
+    return true;
 }
 
-
-void BasicLaserMapping::updateIMU(IMUState2 const& newState)
+void BasicLaserMapping::updateIMU(const IMUState2& newState)
 {
-   _imuHistory.push(newState);
+    this->_imuHistory.push(newState);
 }
 
-void BasicLaserMapping::updateOdometry(double pitch, double yaw, double roll, double x, double y, double z)
+void BasicLaserMapping::updateOdometry(double pitch, double yaw, double roll,
+                                       double x, double y, double z)
 {
-   _transformSum.rot_x = pitch;
-   _transformSum.rot_y = yaw;
-   _transformSum.rot_z = roll;
+    this->_transformSum.rot_x = pitch;
+    this->_transformSum.rot_y = yaw;
+    this->_transformSum.rot_z = roll;
 
-   _transformSum.pos.x() = float(x);
-   _transformSum.pos.y() = float(y);
-   _transformSum.pos.z() = float(z);
+    this->_transformSum.pos.x() = static_cast<float>(x);
+    this->_transformSum.pos.y() = static_cast<float>(y);
+    this->_transformSum.pos.z() = static_cast<float>(z);
 }
 
-void BasicLaserMapping::updateOdometry(Twist const& twist)
+void BasicLaserMapping::updateOdometry(const Twist& twist)
 {
-   _transformSum = twist;
+    this->_transformSum = twist;
 }
 
 nanoflann::KdTreeFLANN<pcl::PointXYZI> kdtreeCornerFromMap;
@@ -699,376 +716,394 @@ nanoflann::KdTreeFLANN<pcl::PointXYZI> kdtreeSurfFromMap;
 
 void BasicLaserMapping::optimizeTransformTobeMapped()
 {
-   if (_laserCloudCornerFromMap->size() <= 10 || _laserCloudSurfFromMap->size() <= 100)
-      return;
+    if (this->_laserCloudCornerFromMap->size() <= 10 ||
+        this->_laserCloudSurfFromMap->size() <= 100)
+        return;
 
-   pcl::PointXYZI pointSel, pointOri, /*pointProj, */coeff;
+    kdtreeCornerFromMap.setInputCloud(this->_laserCloudCornerFromMap);
+    kdtreeSurfFromMap.setInputCloud(this->_laserCloudSurfFromMap);
 
-   std::vector<int> pointSearchInd(5, 0);
-   std::vector<float> pointSearchSqDis(5, 0);
+    Eigen::Matrix3f matV1;
+    matV1.setZero();
 
-   kdtreeCornerFromMap.setInputCloud(_laserCloudCornerFromMap);
-   kdtreeSurfFromMap.setInputCloud(_laserCloudSurfFromMap);
+    bool isDegenerate = false;
+    Eigen::Matrix<float, 6, 6> matP;
 
-   Eigen::Matrix<float, 5, 3> matA0;
-   Eigen::Matrix<float, 5, 1> matB0;
-   Eigen::Vector3f matX0;
-   Eigen::Matrix3f matA1;
-   Eigen::Matrix<float, 1, 3> matD1;
-   Eigen::Matrix3f matV1;
+    // Start the iterations of the Gauss-Newton method
+    for (std::size_t iter = 0; iter < this->_maxIterations; ++iter) {
+        this->_laserCloudOri.clear();
+        this->_coeffSel.clear();
 
-   matA0.setZero();
-   matB0.setConstant(-1);
-   matX0.setZero();
+        // Compute the distances and coefficients from the point-to-edge
+        // correspondences
+        this->computeCornerDistances();
+        // Compute the distances and coefficients from the point-to-plane
+        // correspondences
+        this->computePlaneDistances();
 
-   matA1.setZero();
-   matD1.setZero();
-   matV1.setZero();
+        const float srx = this->_transformTobeMapped.rot_x.sin();
+        const float crx = this->_transformTobeMapped.rot_x.cos();
+        const float sry = this->_transformTobeMapped.rot_y.sin();
+        const float cry = this->_transformTobeMapped.rot_y.cos();
+        const float srz = this->_transformTobeMapped.rot_z.sin();
+        const float crz = this->_transformTobeMapped.rot_z.cos();
 
-   bool isDegenerate = false;
-   Eigen::Matrix<float, 6, 6> matP;
+        const std::size_t laserCloudSelNum = this->_laserCloudOri.size();
 
-   size_t laserCloudCornerStackNum = _laserCloudCornerStackDS->size();
-   size_t laserCloudSurfStackNum = _laserCloudSurfStackDS->size();
+        if (laserCloudSelNum < 50)
+            continue;
 
-   // Start the iterations of the Gauss-Newton method
-   for (size_t iterCount = 0; iterCount < _maxIterations; iterCount++)
-   {
-      _laserCloudOri.clear();
-      _coeffSel.clear();
+        // `matA` is the Jacobian matrix in Equation (12)
+        Eigen::Matrix<float, Eigen::Dynamic, 6> matA(laserCloudSelNum, 6);
+        Eigen::Matrix<float, 6, Eigen::Dynamic> matAt(6, laserCloudSelNum);
+        // `matAtA` is the Hessian matrix (J^T J) in Equation (12)
+        Eigen::Matrix<float, 6, 6> matAtA;
+        // `matB` is the distance vector (d) in Equation (12)
+        Eigen::VectorXf matB(laserCloudSelNum);
+        // `matAtB` is the residual vector (J^T d) in Equation (12)
+        Eigen::VectorXf matAtB;
+        Eigen::VectorXf matX;
 
-      // For each corner point in the downsampled current point cloud,
-      // find the closest neighbors in the map cloud
-      for (int i = 0; i < laserCloudCornerStackNum; i++)
-      {
-         pointOri = _laserCloudCornerStackDS->points[i];
-         // Convert the corner point coordinates in the scan coordinate frame
-         // at t_(k + 2) to the mapped coordinate frame using the current pose
-         // estimate, i.e., `_transformTobeMapped`
-         pointAssociateToMap(pointOri, pointSel);
-         // Find the 5 closest neighbors in the map cloud
-         kdtreeCornerFromMap.nearestKSearch(pointSel, 5, pointSearchInd, pointSearchSqDis);
+        for (int i = 0; i < laserCloudSelNum; ++i) {
+            const pcl::PointXYZI& pointOri = this->_laserCloudOri.points[i];
+            const pcl::PointXYZI& coeff = this->_coeffSel.points[i];
 
-         // If distances to all closest neighbors are less than 1m, then
-         // compute the coefficient for the Gauss-Newton optimization
-         if (pointSearchSqDis[4] < 1.0)
-         {
-            // Compute the average of the closest neighbor coordinates
-            Vector3 vc(0, 0, 0);
+            const float arx = (crx*sry*srz*pointOri.x + crx * crz*sry*pointOri.y - srx * sry*pointOri.z) * coeff.x
+                + (-srx * srz*pointOri.x - crz * srx*pointOri.y - crx * pointOri.z) * coeff.y
+                + (crx*cry*srz*pointOri.x + crx * cry*crz*pointOri.y - cry * srx*pointOri.z) * coeff.z;
 
-            for (int j = 0; j < 5; j++)
-               vc += Vector3(_laserCloudCornerFromMap->points[pointSearchInd[j]]);
-            vc /= 5.0;
+            const float ary = ((cry*srx*srz - crz * sry)*pointOri.x
+                        + (sry*srz + cry * crz*srx)*pointOri.y + crx * cry*pointOri.z) * coeff.x
+                + ((-cry * crz - srx * sry*srz)*pointOri.x
+                + (cry*srz - crz * srx*sry)*pointOri.y - crx * sry*pointOri.z) * coeff.z;
 
-            // Compute the lower-triangular part of the covariance matrix of
-            // the closest neighbor coordinates and then compute eigenvectors
-            // and eigenvalues of the covariance matrix
-            Eigen::Matrix3f mat_a;
-            mat_a.setZero();
+            const float arz = ((crz*srx*sry - cry * srz)*pointOri.x + (-cry * crz - srx * sry*srz)*pointOri.y)*coeff.x
+                + (crx*crz*pointOri.x - crx * srz*pointOri.y) * coeff.y
+                + ((sry*srz + cry * crz*srx)*pointOri.x + (crz*sry - cry * srx*srz)*pointOri.y)*coeff.z;
 
-            for (int j = 0; j < 5; j++)
-            {
-               Vector3 a = Vector3(_laserCloudCornerFromMap->points[pointSearchInd[j]]) - vc;
+            matA(i, 0) = arx;
+            matA(i, 1) = ary;
+            matA(i, 2) = arz;
+            matA(i, 3) = coeff.x;
+            matA(i, 4) = coeff.y;
+            matA(i, 5) = coeff.z;
+            // Reverse the sign of the residual to follow Gauss-Newton method
+            matB(i, 0) = -coeff.intensity;
+        }
 
-               mat_a(0, 0) += a.x() * a.x();
-               mat_a(1, 0) += a.x() * a.y();
-               mat_a(2, 0) += a.x() * a.z();
-               mat_a(1, 1) += a.y() * a.y();
-               mat_a(2, 1) += a.y() * a.z();
-               mat_a(2, 2) += a.z() * a.z();
-            }
-            matA1 = mat_a / 5.0;
-            // This solver only looks at the lower-triangular part of matA1.
-            Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> esolver(matA1);
-            // Eigenvalues are sorted in an ascending order
-            matD1 = esolver.eigenvalues().real();
-            matV1 = esolver.eigenvectors().real();
+        matAt = matA.transpose();
+        matAtA = matAt * matA;
+        matAtB = matAt * matB;
 
-            // If one eigenvalue is larger than the other two, then the closest
-            // neighbors represent the edge line, and the eigenvector associated
-            // with the largest eigenvalue represents the orientation of the
-            // edge line
-            if (matD1(0, 2) > 3 * matD1(0, 1))
-            {
-               float x0 = pointSel.x;
-               float y0 = pointSel.y;
-               float z0 = pointSel.z;
-               // The position of the edge line is the center of the 5 closest
-               // neighbors that represent the edge line, and two points
-               // (x1, y1, z1) and (x2, y2, z2) should be on the edge line
-               float x1 = vc.x() + 0.1 * matV1(0, 2);
-               float y1 = vc.y() + 0.1 * matV1(1, 2);
-               float z1 = vc.z() + 0.1 * matV1(2, 2);
-               float x2 = vc.x() - 0.1 * matV1(0, 2);
-               float y2 = vc.y() - 0.1 * matV1(1, 2);
-               float z2 = vc.z() - 0.1 * matV1(2, 2);
+        // Compute the increment to the current transformation
+        matX = matAtA.colPivHouseholderQr().solve(matAtB);
 
-               // Compute the numerator of the Equation (2)
-               float a012 = sqrt(((x0 - x1)*(y0 - y2) - (x0 - x2)*(y0 - y1))
-                                 * ((x0 - x1)*(y0 - y2) - (x0 - x2)*(y0 - y1))
-                                 + ((x0 - x1)*(z0 - z2) - (x0 - x2)*(z0 - z1))
-                                 * ((x0 - x1)*(z0 - z2) - (x0 - x2)*(z0 - z1))
-                                 + ((y0 - y1)*(z0 - z2) - (y0 - y2)*(z0 - z1))
-                                 * ((y0 - y1)*(z0 - z2) - (y0 - y2)*(z0 - z1)));
+        // Check the occurrence of the degeneration following the paper:
+        // Ji Zhang, Michael Kaess, and Sanjiv Singh. "On Degeneracy of
+        // Optimization-based State Estimation Problems," in the Proceedings
+        // of the IEEE International Conference on Robotics and Automation
+        // (ICRA), 2016.
+        if (iter == 0) {
+            // Compute the eigenvalues and eigenvectors of the Hessian matrix
+            Eigen::SelfAdjointEigenSolver<Eigen::Matrix<float, 6, 6>>
+                eigenSolver(matAtA);
+            const Eigen::Matrix<float, 1, 6> matE =
+                eigenSolver.eigenvalues().real();
+            const Eigen::Matrix<float, 6, 6> matV =
+                eigenSolver.eigenvectors().real();
+            Eigen::Matrix<float, 6, 6> matV2 = matV;
 
-               // Compute the denominator of the Equation (2)
-               float l12 = sqrt((x1 - x2)*(x1 - x2) + (y1 - y2)*(y1 - y2) + (z1 - z2)*(z1 - z2));
+            isDegenerate = false;
+            const float eigenThreshold[6] = { 100, 100, 100, 100, 100, 100 };
 
-               // Compute the normal vector (la, lb, lc) of the edge line, i.e.,
-               // the vector from the projection of the point (x0, y0, z0) on
-               // the edge line between points (x1, y1, z1) and (x2, y2, z2)
-               // to the point (x0, y0, z0)
-               float la = ((y1 - y2)*((x0 - x1)*(y0 - y2) - (x0 - x2)*(y0 - y1))
-                           + (z1 - z2)*((x0 - x1)*(z0 - z2) - (x0 - x2)*(z0 - z1))) / a012 / l12;
-
-               float lb = -((x1 - x2)*((x0 - x1)*(y0 - y2) - (x0 - x2)*(y0 - y1))
-                            - (z1 - z2)*((y0 - y1)*(z0 - z2) - (y0 - y2)*(z0 - z1))) / a012 / l12;
-
-               float lc = -((x1 - x2)*((x0 - x1)*(z0 - z2) - (x0 - x2)*(z0 - z1))
-                            + (y1 - y2)*((y0 - y1)*(z0 - z2) - (y0 - y2)*(z0 - z1))) / a012 / l12;
-
-               // Compute the point-to-line distance using the Equation (2),
-               // i.e., the distance from the corner point in the current scan
-               // (x0, y0, z0) to the edge lines between (x1, y1, z1) and
-               // (x2, y2, z2) which are obtained from the corner points of
-               // the map cloud
-               float ld2 = a012 / l12;
-
-//                // TODO: Why writing to a variable that's never read? Maybe it should be used afterwards?
-//                pointProj = pointSel;
-//                pointProj.x -= la * ld2;
-//                pointProj.y -= lb * ld2;
-//                pointProj.z -= lc * ld2;
-
-               float s = 1 - 0.9f * fabs(ld2);
-
-               // Compute the coefficient for the pose optimization
-               coeff.x = s * la;
-               coeff.y = s * lb;
-               coeff.z = s * lc;
-               coeff.intensity = s * ld2;
-
-               if (s > 0.1)
-               {
-                  _laserCloudOri.push_back(pointOri);
-                  _coeffSel.push_back(coeff);
-               }
-            }
-         }
-      }
-
-      // For each planar point in the downsampled current point cloud,
-      // find the closest neighbors in the map cloud
-      for (int i = 0; i < laserCloudSurfStackNum; i++)
-      {
-         pointOri = _laserCloudSurfStackDS->points[i];
-         // Convert the planar point coordinates in the scan coordinate frame
-         // at t_(k + 2) to the mapped coordinate frame using the current pose
-         // estimate
-         pointAssociateToMap(pointOri, pointSel);
-         // Find the 5 closest neighbors in the map cloud
-         kdtreeSurfFromMap.nearestKSearch(pointSel, 5, pointSearchInd, pointSearchSqDis);
-
-         // If distances to all closest neighbors are less than 1m, then
-         // compute the coefficient for the Gauss-Newton optimization
-         if (pointSearchSqDis[4] < 1.0)
-         {
-            // Store coordinates of the closest neighbors to the matrix
-            for (int j = 0; j < 5; j++)
-            {
-               matA0(j, 0) = _laserCloudSurfFromMap->points[pointSearchInd[j]].x;
-               matA0(j, 1) = _laserCloudSurfFromMap->points[pointSearchInd[j]].y;
-               matA0(j, 2) = _laserCloudSurfFromMap->points[pointSearchInd[j]].z;
+            // Eigenvalues are sorted in the increasing order
+            // Detect the occurrence of the degeneration if one of the
+            // eigenvalues is less than 100
+            for (int i = 0; i < 6; ++i) {
+                if (matE(0, i) < eigenThreshold[i]) {
+                    matV2.row(i).setZero();
+                    isDegenerate = true;
+                } else {
+                    break;
+                }
             }
 
-            // Compute the normal vector (pa, pb, pc) that is perpenidcular to
-            // the plane defined by a set of neighbor points `pointSearchInd`
-            matX0 = matA0.colPivHouseholderQr().solve(matB0);
+            // Do not update the transformation along the degenerate direction
+            matP = matV.inverse() * matV2;
+        }
 
-            float pa = matX0(0, 0);
-            float pb = matX0(1, 0);
-            float pc = matX0(2, 0);
-            float pd = 1;
+        if (isDegenerate) {
+            // Do not update the transformation along the degenerate direction
+            Eigen::Matrix<float, 6, 1> matX2(matX);
+            matX = matP * matX2;
+        }
 
-            // Normalize the normal vector (pa, pb, pc) of the plane
-            float ps = sqrt(pa * pa + pb * pb + pc * pc);
-            pa /= ps;
-            pb /= ps;
-            pc /= ps;
-            pd /= ps;
+        // Update the transformation (rotation and translation)
+        this->_transformTobeMapped.rot_x += matX(0, 0);
+        this->_transformTobeMapped.rot_y += matX(1, 0);
+        this->_transformTobeMapped.rot_z += matX(2, 0);
+        this->_transformTobeMapped.pos.x() += matX(3, 0);
+        this->_transformTobeMapped.pos.y() += matX(4, 0);
+        this->_transformTobeMapped.pos.z() += matX(5, 0);
 
-            // If all neighbor points `pointSearchInd` are on the same plane,
-            // then the below fabs() should be closer to zero for all points
-            bool planeValid = true;
-            for (int j = 0; j < 5; j++)
-            {
-               if (fabs(pa * _laserCloudSurfFromMap->points[pointSearchInd[j]].x +
-                        pb * _laserCloudSurfFromMap->points[pointSearchInd[j]].y +
-                        pc * _laserCloudSurfFromMap->points[pointSearchInd[j]].z + pd) > 0.2)
-               {
-                  planeValid = false;
-                  break;
-               }
+        // Compute the increment in degrees and centimeters
+        const float deltaR = std::sqrt(
+            std::pow(rad2deg(matX(0, 0)), 2)
+            + std::pow(rad2deg(matX(1, 0)), 2)
+            + std::pow(rad2deg(matX(2, 0)), 2));
+        const float deltaT = std::sqrt(
+            std::pow(matX(3, 0) * 100, 2)
+            + std::pow(matX(4, 0) * 100, 2)
+            + std::pow(matX(5, 0) * 100, 2));
+
+        // Terminate the Gauss-Newton method if the increment is small
+        if (deltaR < this->_deltaRAbort && deltaT < this->_deltaTAbort)
+            break;
+    }
+
+    // Refine the transformation using IMU data and update the transformation
+    this->transformUpdate();
+}
+
+// Compute the distances and coefficients from the point-to-edge
+// correspondences
+void BasicLaserMapping::computeCornerDistances()
+{
+    const std::size_t laserCloudCornerStackNum =
+        this->_laserCloudCornerStackDS->size();
+
+    std::vector<int> pointSearchInd;
+    std::vector<float> pointSearchSqDis;
+    pointSearchInd.resize(5, 0);
+    pointSearchSqDis.resize(5, 0.0f);
+
+    // For each corner point in the downsampled current point cloud,
+    // find the closest neighbors in the map cloud
+    for (int i = 0; i < laserCloudCornerStackNum; ++i) {
+        const pcl::PointXYZI pointOri =
+            this->_laserCloudCornerStackDS->points[i];
+
+        // Convert the corner point coordinates in the scan coordinate frame
+        // at t_(k + 2) to the mapped coordinate frame using the current pose
+        // estimate, i.e., `_transformTobeMapped`
+        pcl::PointXYZI pointSel;
+        this->pointAssociateToMap(pointOri, pointSel);
+        // Find the 5 closest neighbors in the map cloud
+        kdtreeCornerFromMap.nearestKSearch(
+            pointSel, 5, pointSearchInd, pointSearchSqDis);
+
+        // If distances to all closest neighbors are less than 1m, then
+        // compute the coefficient for the Gauss-Newton optimization
+        if (pointSearchSqDis[4] >= 1.0f)
+            continue;
+
+        // Compute the average of the closest neighbor coordinates
+        Vector3 vc { 0.0f, 0.0f, 0.0f };
+
+        for (const auto idx : pointSearchInd)
+            vc += Vector3(this->_laserCloudCornerFromMap->at(idx));
+
+        vc /= 5.0f;
+
+        // Compute the lower-triangular part of the covariance matrix of
+        // the closest neighbor coordinates and then compute eigenvectors
+        // and eigenvalues of the covariance matrix
+        Eigen::Matrix3f matCov = Eigen::Matrix3f::Zero();
+
+        for (const auto idx : pointSearchInd) {
+            const Vector3 vecDiff =
+                Vector3(this->_laserCloudCornerFromMap->at(idx)) - vc;
+
+            matCov(0, 0) += vecDiff.x() * vecDiff.x();
+            matCov(1, 0) += vecDiff.x() * vecDiff.y();
+            matCov(2, 0) += vecDiff.x() * vecDiff.z();
+            matCov(1, 1) += vecDiff.y() * vecDiff.y();
+            matCov(2, 1) += vecDiff.y() * vecDiff.z();
+            matCov(2, 2) += vecDiff.z() * vecDiff.z();
+        }
+
+        const Eigen::Matrix3f matA1 = matCov / 5.0f;
+
+        // This solver only looks at the lower-triangular part of matA1.
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eigenSolver(matA1);
+        // Eigenvalues are sorted in an ascending order
+        const Eigen::Vector3f vecD1 = eigenSolver.eigenvalues().real();
+        const Eigen::Matrix3f matV1 = eigenSolver.eigenvectors().real();
+
+        // If one eigenvalue is larger than the other two, then the closest
+        // neighbors represent the edge line, and the eigenvector associated
+        // with the largest eigenvalue represents the orientation of the
+        // edge line
+        if (vecD1[2] <= 3.0f * vecD1[1])
+            continue;
+
+        const float x0 = pointSel.x;
+        const float y0 = pointSel.y;
+        const float z0 = pointSel.z;
+        // The position of the edge line is the center of the 5 closest
+        // neighbors that represent the edge line, and two points
+        // (x1, y1, z1) and (x2, y2, z2) should be on the edge line
+        const float x1 = vc.x() + 0.1f * matV1(0, 2);
+        const float y1 = vc.y() + 0.1f * matV1(1, 2);
+        const float z1 = vc.z() + 0.1f * matV1(2, 2);
+        const float x2 = vc.x() - 0.1f * matV1(0, 2);
+        const float y2 = vc.y() - 0.1f * matV1(1, 2);
+        const float z2 = vc.z() - 0.1f * matV1(2, 2);
+
+        // Compute the numerator of the Equation (2)
+        const float a012 = std::sqrt(
+            ((x0 - x1)*(y0 - y2) - (x0 - x2)*(y0 - y1))
+            * ((x0 - x1)*(y0 - y2) - (x0 - x2)*(y0 - y1))
+            + ((x0 - x1)*(z0 - z2) - (x0 - x2)*(z0 - z1))
+            * ((x0 - x1)*(z0 - z2) - (x0 - x2)*(z0 - z1))
+            + ((y0 - y1)*(z0 - z2) - (y0 - y2)*(z0 - z1))
+            * ((y0 - y1)*(z0 - z2) - (y0 - y2)*(z0 - z1)));
+
+        // Compute the denominator of the Equation (2)
+        const float l12 = std::sqrt(
+            (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2)
+            + (z1 - z2) * (z1 - z2));
+
+        // Compute the normal vector (la, lb, lc) of the edge line, i.e.,
+        // the vector from the projection of the point (x0, y0, z0) on
+        // the edge line between points (x1, y1, z1) and (x2, y2, z2)
+        // to the point (x0, y0, z0)
+        const float la = (
+            (y1 - y2) * ((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1))
+            + (z1 - z2) * ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1)))
+            / a012 / l12;
+        const float lb = -(
+            (x1 - x2) * ((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1))
+            - (z1 - z2) * ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1)))
+            / a012 / l12;
+        const float lc = -(
+            (x1 - x2) * ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1))
+            + (y1 - y2) * ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1)))
+            / a012 / l12;
+
+        // Compute the point-to-line distance using the Equation (2),
+        // i.e., the distance from the corner point in the current scan
+        // (x0, y0, z0) to the edge lines between (x1, y1, z1) and
+        // (x2, y2, z2) which are obtained from the corner points of
+        // the map cloud
+        const float ld2 = a012 / l12;
+
+        const float s = 1.0f - 0.9f * std::fabs(ld2);
+
+        if (s <= 0.1f)
+            continue;
+
+        // Compute the coefficient for the pose optimization
+        pcl::PointXYZI coeff;
+        coeff.x = s * la;
+        coeff.y = s * lb;
+        coeff.z = s * lc;
+        coeff.intensity = s * ld2;
+
+        this->_laserCloudOri.push_back(pointOri);
+        this->_coeffSel.push_back(coeff);
+    }
+}
+
+// Compute the distances and coefficients from the point-to-plane
+// correspondences
+void BasicLaserMapping::computePlaneDistances()
+{
+    const std::size_t laserCloudSurfStackNum =
+        this->_laserCloudSurfStackDS->size();
+
+    std::vector<int> pointSearchInd;
+    std::vector<float> pointSearchSqDis;
+    pointSearchInd.resize(5, 0);
+    pointSearchSqDis.resize(5, 0.0f);
+
+    Eigen::Matrix<float, 5, 3> matA0;
+    Eigen::Matrix<float, 5, 1> matB0;
+    matA0.setZero();
+    matB0.setConstant(-1.0f);
+
+    // For each planar point in the downsampled current point cloud,
+    // find the closest neighbors in the map cloud
+    for (int i = 0; i < laserCloudSurfStackNum; ++i) {
+        const pcl::PointXYZI pointOri = _laserCloudSurfStackDS->points[i];
+        // Convert the planar point coordinates in the scan coordinate frame
+        // at t_(k + 2) to the mapped coordinate frame using the current pose
+        // estimate
+        pcl::PointXYZI pointSel;
+        this->pointAssociateToMap(pointOri, pointSel);
+        // Find the 5 closest neighbors in the map cloud
+        kdtreeSurfFromMap.nearestKSearch(
+            pointSel, 5, pointSearchInd, pointSearchSqDis);
+
+        // If distances to all closest neighbors are less than 1m, then
+        // compute the coefficient for the Gauss-Newton optimization
+        if (pointSearchSqDis[4] >= 1.0f)
+            continue;
+
+        // Store coordinates of the closest neighbors to the matrix
+        for (int j = 0; j < 5; ++j) {
+            const pcl::PointXYZI& neighborPoint =
+                this->_laserCloudSurfFromMap->at(pointSearchInd[j]);
+            matA0(j, 0) = neighborPoint.x;
+            matA0(j, 1) = neighborPoint.y;
+            matA0(j, 2) = neighborPoint.z;
+        }
+
+        // Compute the normal vector (pa, pb, pc) that is perpenidcular to
+        // the plane defined by a set of neighbor points `pointSearchInd`
+        const Eigen::Vector3f matX0 = matA0.colPivHouseholderQr().solve(matB0);
+
+        float pa = matX0(0, 0);
+        float pb = matX0(1, 0);
+        float pc = matX0(2, 0);
+        float pd = 1.0f;
+
+        // Normalize the normal vector (pa, pb, pc) of the plane
+        const float ps = std::sqrt(pa * pa + pb * pb + pc * pc);
+        pa /= ps;
+        pb /= ps;
+        pc /= ps;
+        pd /= ps;
+
+        // If all neighbor points `pointSearchInd` are on the same plane,
+        // then the distance between the neighbor point and the plane
+        // should be closer to zero
+        bool planeValid = true;
+        for (int j = 0; j < 5; ++j) {
+            const pcl::PointXYZI& neighborPoint =
+                this->_laserCloudSurfFromMap->at(pointSearchInd[j]);
+            const float dist = pa * neighborPoint.x + pb * neighborPoint.y
+                               + pc * neighborPoint.z + pd;
+
+            if (std::abs(dist) > 0.2f) {
+                planeValid = false;
+                break;
             }
+        }
 
-            if (planeValid)
-            {
-               // Compute the d_h using the Equation (3)
-               // Note that the distance below could be negative
-               float pd2 = pa * pointSel.x + pb * pointSel.y + pc * pointSel.z + pd;
+        if (!planeValid)
+            continue;
 
-               //                // TODO: Why writing to a variable that's never read? Maybe it should be used afterwards?
-               //                pointProj = pointSel;
-               //                pointProj.x -= pa * pd2;
-               //                pointProj.y -= pb * pd2;
-               //                pointProj.z -= pc * pd2;
+        // Compute the d_h using the Equation (3)
+        // Note that the distance below could be negative
+        const float pd2 = pa * pointSel.x + pb * pointSel.y
+                          + pc * pointSel.z + pd;
 
-               float s = 1 - 0.9f * fabs(pd2) / sqrt(calcPointDistance(pointSel));
+        const float s = 1.0f - 0.9f * std::fabs(pd2)
+                        / std::sqrt(calcPointDistance(pointSel));
 
-               coeff.x = s * pa;
-               coeff.y = s * pb;
-               coeff.z = s * pc;
-               coeff.intensity = s * pd2;
+        if (s <= 0.1f)
+            continue;
 
-               if (s > 0.1)
-               {
-                  _laserCloudOri.push_back(pointOri);
-                  _coeffSel.push_back(coeff);
-               }
-            }
-         }
-      }
+        pcl::PointXYZI coeff;
+        coeff.x = s * pa;
+        coeff.y = s * pb;
+        coeff.z = s * pc;
+        coeff.intensity = s * pd2;
 
-      float srx = _transformTobeMapped.rot_x.sin();
-      float crx = _transformTobeMapped.rot_x.cos();
-      float sry = _transformTobeMapped.rot_y.sin();
-      float cry = _transformTobeMapped.rot_y.cos();
-      float srz = _transformTobeMapped.rot_z.sin();
-      float crz = _transformTobeMapped.rot_z.cos();
-
-      size_t laserCloudSelNum = _laserCloudOri.size();
-      if (laserCloudSelNum < 50)
-         continue;
-
-      // `matA` is the Jacobian matrix in Equation (12)
-      Eigen::Matrix<float, Eigen::Dynamic, 6> matA(laserCloudSelNum, 6);
-      Eigen::Matrix<float, 6, Eigen::Dynamic> matAt(6, laserCloudSelNum);
-      // `matAtA` is the Hessian matrix (J^T J) in Equation (12)
-      Eigen::Matrix<float, 6, 6> matAtA;
-      // `matB` is the distance vector (d) in Equation (12)
-      Eigen::VectorXf matB(laserCloudSelNum);
-      // `matAtB` is the residual vector (J^T d) in Equation (12)
-      Eigen::VectorXf matAtB;
-      Eigen::VectorXf matX;
-
-      for (int i = 0; i < laserCloudSelNum; i++)
-      {
-         pointOri = _laserCloudOri.points[i];
-         coeff = _coeffSel.points[i];
-
-         float arx = (crx*sry*srz*pointOri.x + crx * crz*sry*pointOri.y - srx * sry*pointOri.z) * coeff.x
-            + (-srx * srz*pointOri.x - crz * srx*pointOri.y - crx * pointOri.z) * coeff.y
-            + (crx*cry*srz*pointOri.x + crx * cry*crz*pointOri.y - cry * srx*pointOri.z) * coeff.z;
-
-         float ary = ((cry*srx*srz - crz * sry)*pointOri.x
-                      + (sry*srz + cry * crz*srx)*pointOri.y + crx * cry*pointOri.z) * coeff.x
-            + ((-cry * crz - srx * sry*srz)*pointOri.x
-               + (cry*srz - crz * srx*sry)*pointOri.y - crx * sry*pointOri.z) * coeff.z;
-
-         float arz = ((crz*srx*sry - cry * srz)*pointOri.x + (-cry * crz - srx * sry*srz)*pointOri.y)*coeff.x
-            + (crx*crz*pointOri.x - crx * srz*pointOri.y) * coeff.y
-            + ((sry*srz + cry * crz*srx)*pointOri.x + (crz*sry - cry * srx*srz)*pointOri.y)*coeff.z;
-
-         matA(i, 0) = arx;
-         matA(i, 1) = ary;
-         matA(i, 2) = arz;
-         matA(i, 3) = coeff.x;
-         matA(i, 4) = coeff.y;
-         matA(i, 5) = coeff.z;
-         // Reverse the sign of the residual to follow Gauss-Newton method
-         matB(i, 0) = -coeff.intensity;
-      }
-
-      matAt = matA.transpose();
-      matAtA = matAt * matA;
-      matAtB = matAt * matB;
-
-      // Compute the increment to the current transformation
-      matX = matAtA.colPivHouseholderQr().solve(matAtB);
-
-      if (iterCount == 0)
-      {
-         // Check the occurrence of the degeneration following the paper:
-         // Ji Zhang, Michael Kaess, and Sanjiv Singh. "On Degeneracy of
-         // Optimization-based State Estimation Problems," in the Proceedings
-         // of the IEEE International Conference on Robotics and Automation
-         // (ICRA), 2016.
-         Eigen::Matrix<float, 1, 6> matE;
-         Eigen::Matrix<float, 6, 6> matV;
-         Eigen::Matrix<float, 6, 6> matV2;
-
-         // Compute the eigenvalues and eigenvectors of the Hessian matrix
-         Eigen::SelfAdjointEigenSolver< Eigen::Matrix<float, 6, 6> > esolver(matAtA);
-         matE = esolver.eigenvalues().real();
-         matV = esolver.eigenvectors().real();
-
-         matV2 = matV;
-
-         isDegenerate = false;
-         float eignThre[6] = { 100, 100, 100, 100, 100, 100 };
-         // Eigenvalues are sorted in the increasing order
-         // Detect the occurrence of the degeneration if one of the
-         // eigenvalues is less than 100
-         for (int i = 0; i < 6; i++)
-         {
-            if (matE(0, i) < eignThre[i])
-            {
-               for (int j = 0; j < 6; j++)
-               {
-                  matV2(i, j) = 0;
-               }
-               isDegenerate = true;
-            }
-            else
-            {
-               break;
-            }
-         }
-
-        // Do not update the transformation along the degenerate direction
-         matP = matV.inverse() * matV2;
-      }
-
-      if (isDegenerate)
-      {
-         // Do not update the transformation along the degenerate direction
-         Eigen::Matrix<float, 6, 1> matX2(matX);
-         matX = matP * matX2;
-      }
-
-      // Update the transformation (rotation and translation)
-      _transformTobeMapped.rot_x += matX(0, 0);
-      _transformTobeMapped.rot_y += matX(1, 0);
-      _transformTobeMapped.rot_z += matX(2, 0);
-      _transformTobeMapped.pos.x() += matX(3, 0);
-      _transformTobeMapped.pos.y() += matX(4, 0);
-      _transformTobeMapped.pos.z() += matX(5, 0);
-
-      // Compute the increment in degrees and centimeters
-      float deltaR = sqrt(pow(rad2deg(matX(0, 0)), 2) +
-                          pow(rad2deg(matX(1, 0)), 2) +
-                          pow(rad2deg(matX(2, 0)), 2));
-      float deltaT = sqrt(pow(matX(3, 0) * 100, 2) +
-                          pow(matX(4, 0) * 100, 2) +
-                          pow(matX(5, 0) * 100, 2));
-
-      // Terminate the Gauss-Newton method if the increment is small
-      if (deltaR < _deltaRAbort && deltaT < _deltaTAbort)
-         break;
-   }
-
-   // Refine the transformation using IMU data and update the transformation
-   transformUpdate();
+        this->_laserCloudOri.push_back(pointOri);
+        this->_coeffSel.push_back(coeff);
+    }
 }
 
 } // namespace loam
