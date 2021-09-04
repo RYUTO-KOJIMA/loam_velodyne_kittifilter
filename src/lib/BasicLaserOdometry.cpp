@@ -272,17 +272,16 @@ void BasicLaserOdometry::performOptimization()
     Eigen::Matrix<float, 6, 6> matP;
 
     // Perform iterations of the Gauss-Newton method
-    for (std::size_t iterCount = 0;
-         iterCount < this->_maxIterations; ++iterCount) {
+    for (std::size_t iter = 0; iter < this->_maxIterations; ++iter) {
         this->_laserCloudOri->clear();
         this->_coeffSel->clear();
 
         // Compute the distances and coefficients from the point-to-edge
         // correspondences
-        this->computeCornerDistances(iterCount);
+        this->computeCornerDistances(iter);
         // Compute the distances and coefficients from the point-to-plane
         // correspondences
-        this->computePlaneDistances(iterCount);
+        this->computePlaneDistances(iter);
 
         // If the number of selected points is less than 10, move to the next
         // iteration and do not perform the following optimization
@@ -369,7 +368,7 @@ void BasicLaserOdometry::performOptimization()
         matX = matAtA.colPivHouseholderQr().solve(matAtB);
 
         // Check the occurrence of the degeneration
-        if (iterCount == 0)
+        if (iter == 0)
             isDegenerate = this->checkDegeneration(matAtA, matP);
 
         // Do not update the transformation along the degenerate direction
