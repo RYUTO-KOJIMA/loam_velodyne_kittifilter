@@ -34,6 +34,7 @@
 //     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
 
 #include "loam_velodyne/BasicLaserMapping.h"
+#include "loam_velodyne/Transform.hpp"
 #include "loam_velodyne/nanoflann_pcl.h"
 #include "math_utils.h"
 
@@ -120,83 +121,72 @@ BasicLaserMapping::BasicLaserMapping(const float scanPeriod,
 
 void BasicLaserMapping::transformAssociateToMap()
 {
-   // `_transformBefMapped` is actually `_transformSum` in the previous step,
-   // meaning that it is the last odometry pose at t_(k + 1) computed using
-   // the scan at t_k reprojected to t_(k + 1) and the scan at t_(k + 1)
-   // `_transformSum` is the new odometry pose at t_(k + 2), and thus
-   // `_transformIncre` is the difference of two consecutive odometry poses
-   _transformIncre.pos = _transformBefMapped.pos - _transformSum.pos;
-   rotateYXZ(_transformIncre.pos, -(_transformSum.rot_y), -(_transformSum.rot_x), -(_transformSum.rot_z));
+    // Compute three rotation matrices R_bc = Ry(bcy) Rx(bcx) Rz(bcz),
+    // R_bl = Ry(bly) Rx(blx) Rz(blz), and R_al = Ry(aly) Rx(alx) Rz(alz)
+    // and store three Euler angles (rx, ry, rz) that correspond to the
+    // rotation matrix R_al (R_bl)^T R_bc, where (bcx, bcy, bcz) is
+    // `_transformSum`, (blx, bly, blz) is `_transformBefMapped`, and
+    // (alx, aly, alz) is `_transformAftMapped`
 
-   // `_transformAftMapped` and `_transformTobeMapped` are the poses of the
-   // scans at time t_(k + 1) and t_(k + 2) in the mapped coordinate frame
+    // Create rotation matrices from Euler angles in `_transformSum`,
+    // `_transformBefMapped`, and `_transformAftMapped`
+    const Eigen::Matrix3f rotationMatSum = rotationMatrixZXY(
+        this->_transformSum.rot_x.rad(),
+        this->_transformSum.rot_y.rad(),
+        this->_transformSum.rot_z.rad());
+    const Eigen::Matrix3f rotationMatBefMapped = rotationMatrixZXY(
+        this->_transformBefMapped.rot_x.rad(),
+        this->_transformBefMapped.rot_y.rad(),
+        this->_transformBefMapped.rot_z.rad());
+    const Eigen::Matrix3f rotationMatAftMapped = rotationMatrixZXY(
+        this->_transformAftMapped.rot_x.rad(),
+        this->_transformAftMapped.rot_y.rad(),
+        this->_transformAftMapped.rot_z.rad());
 
-   // Compute three rotation matrices R_bc = Ry(bcy) Rx(bcx) Rz(bcz),
-   // R_bl = Ry(bly) Rx(blx) Rz(blz), and R_al = Ry(aly) Rx(alx) Rz(alz)
-   // and store three Euler angles (rx, ry, rz) that correspond to the
-   // rotation matrix R_al (R_bl)^T R_bc, where (bcx, bcy, bcz) is
-   // `_transformSum`, (blx, bly, blz) is `_transformBefMapped`, and
-   // (alx, aly, alz) is `_transformAftMapped`
+    // `_transformBefMapped` is actually `_transformSum` in the previous step,
+    // meaning that it is the last odometry pose at t_(k + 1) computed using
+    // the scan at t_k reprojected to t_(k + 1) and the scan at t_(k + 1)
+    // `_transformSum` is the new odometry pose at t_(k + 2), and thus
+    // `_transformIncre` is the difference of two consecutive odometry poses
+    const Eigen::Vector3f globalIncre {
+        this->_transformBefMapped.pos.x() - this->_transformSum.pos.x(),
+        this->_transformBefMapped.pos.y() - this->_transformSum.pos.y(),
+        this->_transformBefMapped.pos.z() - this->_transformSum.pos.z() };
+    const Eigen::Vector3f transformIncre =
+        rotationMatSum.transpose() * globalIncre;
 
-   float sbcx = _transformSum.rot_x.sin();
-   float cbcx = _transformSum.rot_x.cos();
-   float sbcy = _transformSum.rot_y.sin();
-   float cbcy = _transformSum.rot_y.cos();
-   float sbcz = _transformSum.rot_z.sin();
-   float cbcz = _transformSum.rot_z.cos();
+    this->_transformIncre.pos.x() = transformIncre.x();
+    this->_transformIncre.pos.y() = transformIncre.y();
+    this->_transformIncre.pos.z() = transformIncre.z();
 
-   float sblx = _transformBefMapped.rot_x.sin();
-   float cblx = _transformBefMapped.rot_x.cos();
-   float sbly = _transformBefMapped.rot_y.sin();
-   float cbly = _transformBefMapped.rot_y.cos();
-   float sblz = _transformBefMapped.rot_z.sin();
-   float cblz = _transformBefMapped.rot_z.cos();
+    // Compose three rotation matrices above for `_transformTobeMapped`
+    // `_transformAftMapped` and `_transformTobeMapped` are the poses of the
+    // scans at time t_(k + 1) and t_(k + 2) in the mapped coordinate frame
+    const Eigen::Matrix3f rotationMatTobeMapped =
+        rotationMatAftMapped * rotationMatBefMapped.transpose()
+        * rotationMatSum;
+    // Get three Euler angles from the rotation matrix above
+    Eigen::Vector3f eulerAnglesTobeMapped;
+    eulerAnglesFromRotationZXY(
+        rotationMatTobeMapped, eulerAnglesTobeMapped.x(),
+        eulerAnglesTobeMapped.y(), eulerAnglesTobeMapped.z());
 
-   float salx = _transformAftMapped.rot_x.sin();
-   float calx = _transformAftMapped.rot_x.cos();
-   float saly = _transformAftMapped.rot_y.sin();
-   float caly = _transformAftMapped.rot_y.cos();
-   float salz = _transformAftMapped.rot_z.sin();
-   float calz = _transformAftMapped.rot_z.cos();
+    this->_transformTobeMapped.rot_x = eulerAnglesTobeMapped.x();
+    this->_transformTobeMapped.rot_y = eulerAnglesTobeMapped.y();
+    this->_transformTobeMapped.rot_z = eulerAnglesTobeMapped.z();
 
-   float srx = -sbcx * (salx*sblx + calx * cblx*salz*sblz + calx * calz*cblx*cblz)
-      - cbcx * sbcy*(calx*calz*(cbly*sblz - cblz * sblx*sbly)
-                     - calx * salz*(cbly*cblz + sblx * sbly*sblz) + cblx * salx*sbly)
-      - cbcx * cbcy*(calx*salz*(cblz*sbly - cbly * sblx*sblz)
-                     - calx * calz*(sbly*sblz + cbly * cblz*sblx) + cblx * cbly*salx);
-   _transformTobeMapped.rot_x = -asin(srx);
+    // Compute the translation at t_(k + 2)
+    const Eigen::Vector3f transformAftMapped {
+        this->_transformAftMapped.pos.x(), this->_transformAftMapped.pos.y(),
+        this->_transformAftMapped.pos.z() };
+    const Eigen::Vector3f transformTobeMapped =
+        transformAftMapped - rotationMatTobeMapped * transformIncre;
 
-   float srycrx = sbcx * (cblx*cblz*(caly*salz - calz * salx*saly)
-                          - cblx * sblz*(caly*calz + salx * saly*salz) + calx * saly*sblx)
-      - cbcx * cbcy*((caly*calz + salx * saly*salz)*(cblz*sbly - cbly * sblx*sblz)
-                     + (caly*salz - calz * salx*saly)*(sbly*sblz + cbly * cblz*sblx) - calx * cblx*cbly*saly)
-      + cbcx * sbcy*((caly*calz + salx * saly*salz)*(cbly*cblz + sblx * sbly*sblz)
-                     + (caly*salz - calz * salx*saly)*(cbly*sblz - cblz * sblx*sbly) + calx * cblx*saly*sbly);
-   float crycrx = sbcx * (cblx*sblz*(calz*saly - caly * salx*salz)
-                          - cblx * cblz*(saly*salz + caly * calz*salx) + calx * caly*sblx)
-      + cbcx * cbcy*((saly*salz + caly * calz*salx)*(sbly*sblz + cbly * cblz*sblx)
-                     + (calz*saly - caly * salx*salz)*(cblz*sbly - cbly * sblx*sblz) + calx * caly*cblx*cbly)
-      - cbcx * sbcy*((saly*salz + caly * calz*salx)*(cbly*sblz - cblz * sblx*sbly)
-                     + (calz*saly - caly * salx*salz)*(cbly*cblz + sblx * sbly*sblz) - calx * caly*cblx*sbly);
-   _transformTobeMapped.rot_y = atan2(srycrx / _transformTobeMapped.rot_x.cos(),
-                                      crycrx / _transformTobeMapped.rot_x.cos());
+    this->_transformTobeMapped.pos.x() = transformTobeMapped.x();
+    this->_transformTobeMapped.pos.y() = transformTobeMapped.y();
+    this->_transformTobeMapped.pos.z() = transformTobeMapped.z();
 
-   float srzcrx = (cbcz*sbcy - cbcy * sbcx*sbcz)*(calx*salz*(cblz*sbly - cbly * sblx*sblz)
-                                                  - calx * calz*(sbly*sblz + cbly * cblz*sblx) + cblx * cbly*salx)
-      - (cbcy*cbcz + sbcx * sbcy*sbcz)*(calx*calz*(cbly*sblz - cblz * sblx*sbly)
-                                        - calx * salz*(cbly*cblz + sblx * sbly*sblz) + cblx * salx*sbly)
-      + cbcx * sbcz*(salx*sblx + calx * cblx*salz*sblz + calx * calz*cblx*cblz);
-   float crzcrx = (cbcy*sbcz - cbcz * sbcx*sbcy)*(calx*calz*(cbly*sblz - cblz * sblx*sbly)
-                                                  - calx * salz*(cbly*cblz + sblx * sbly*sblz) + cblx * salx*sbly)
-      - (sbcy*sbcz + cbcy * cbcz*sbcx)*(calx*salz*(cblz*sbly - cbly * sblx*sblz)
-                                        - calx * calz*(sbly*sblz + cbly * cblz*sblx) + cblx * cbly*salx)
-      + cbcx * cbcz*(salx*sblx + calx * cblx*salz*sblz + calx * calz*cblx*cblz);
-   _transformTobeMapped.rot_z = atan2(srzcrx / _transformTobeMapped.rot_x.cos(),
-                                      crzcrx / _transformTobeMapped.rot_x.cos());
-
-   Vector3 v = _transformIncre.pos;
-   rotateZXY(v, _transformTobeMapped.rot_z, _transformTobeMapped.rot_x, _transformTobeMapped.rot_y);
-   _transformTobeMapped.pos = _transformAftMapped.pos - v;
+    return;
 }
 
 void BasicLaserMapping::transformUpdate()
@@ -897,35 +887,29 @@ void BasicLaserMapping::computeCornerDistances()
         if (pointSearchSqDis[4] >= 1.0f)
             continue;
 
-        // Compute the average of the closest neighbor coordinates
-        Vector3 vc { 0.0f, 0.0f, 0.0f };
+        // Store the average of the closest neighbor coordinates
+        Eigen::Matrix<float, 5, 3> matClosestPoints;
 
-        for (const auto idx : pointSearchInd)
-            vc += Vector3(this->_laserCloudCornerFromMap->at(idx));
-
-        vc /= 5.0f;
-
-        // Compute the lower-triangular part of the covariance matrix of
-        // the closest neighbor coordinates and then compute eigenvectors
-        // and eigenvalues of the covariance matrix
-        Eigen::Matrix3f matCov = Eigen::Matrix3f::Zero();
-
-        for (const auto idx : pointSearchInd) {
-            const Vector3 vecDiff =
-                Vector3(this->_laserCloudCornerFromMap->at(idx)) - vc;
-
-            matCov(0, 0) += vecDiff.x() * vecDiff.x();
-            matCov(1, 0) += vecDiff.x() * vecDiff.y();
-            matCov(2, 0) += vecDiff.x() * vecDiff.z();
-            matCov(1, 1) += vecDiff.y() * vecDiff.y();
-            matCov(2, 1) += vecDiff.y() * vecDiff.z();
-            matCov(2, 2) += vecDiff.z() * vecDiff.z();
+        for (int j = 0; j < 5; ++j) {
+            const pcl::PointXYZI& closestPoint =
+                this->_laserCloudCornerFromMap->at(pointSearchInd[j]);
+            matClosestPoints.row(j) = closestPoint.getVector3fMap();
         }
 
-        const Eigen::Matrix3f matA1 = matCov / 5.0f;
+        // Compute the average of the closest neighbor coordinates
+        const Eigen::Vector3f vecMean = matClosestPoints.colwise().mean();
+        // Compute the lower-triangular part of the covariance matrix
+        // of the closest neighbor coordinates
+        const Eigen::Matrix<float, 5, 3> matCentered =
+            matClosestPoints.rowwise() - vecMean.transpose();
+        Eigen::Matrix3f matCovariance;
+        matCovariance.triangularView<Eigen::Lower>() =
+            matCentered.transpose() * matCentered / 5.0f;
 
-        // This solver only looks at the lower-triangular part of matA1.
-        Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eigenSolver(matA1);
+        // Compute eigenvalues and eigenvectors of the covariance matrix
+        // This solver only looks at the lower-triangular part
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eigenSolver;
+        eigenSolver.compute(matCovariance);
         // Eigenvalues are sorted in an ascending order
         const Eigen::Vector3f vecD1 = eigenSolver.eigenvalues().real();
         const Eigen::Matrix3f matV1 = eigenSolver.eigenvectors().real();
@@ -937,50 +921,28 @@ void BasicLaserMapping::computeCornerDistances()
         if (vecD1[2] <= 3.0f * vecD1[1])
             continue;
 
-        const float x0 = pointSel.x;
-        const float y0 = pointSel.y;
-        const float z0 = pointSel.z;
-        // The position of the edge line is the center of the 5 closest
-        // neighbors that represent the edge line, and two points
-        // (x1, y1, z1) and (x2, y2, z2) should be on the edge line
-        const float x1 = vc.x() + 0.1f * matV1(0, 2);
-        const float y1 = vc.y() + 0.1f * matV1(1, 2);
-        const float z1 = vc.z() + 0.1f * matV1(2, 2);
-        const float x2 = vc.x() - 0.1f * matV1(0, 2);
-        const float y2 = vc.y() - 0.1f * matV1(1, 2);
-        const float z2 = vc.z() - 0.1f * matV1(2, 2);
+        // Extract the orientation of the edge line
+        const Eigen::Vector3f vecEdgeLine = matV1.col(2);
+
+        const Eigen::Vector3f vecI = pointSel.getVector3fMap();
+        const Eigen::Vector3f vecJ = vecMean + 0.1f * vecEdgeLine;
+        const Eigen::Vector3f vecL = vecMean - 0.1f * vecEdgeLine;
+
+        const Eigen::Vector3f vecIJ = vecI - vecJ;
+        const Eigen::Vector3f vecIL = vecI - vecL;
+        const Eigen::Vector3f vecJL = vecJ - vecL;
+        const Eigen::Vector3f vecCross = vecIJ.cross(vecIL);
 
         // Compute the numerator of the Equation (2)
-        const float a012 = std::sqrt(
-            ((x0 - x1)*(y0 - y2) - (x0 - x2)*(y0 - y1))
-            * ((x0 - x1)*(y0 - y2) - (x0 - x2)*(y0 - y1))
-            + ((x0 - x1)*(z0 - z2) - (x0 - x2)*(z0 - z1))
-            * ((x0 - x1)*(z0 - z2) - (x0 - x2)*(z0 - z1))
-            + ((y0 - y1)*(z0 - z2) - (y0 - y2)*(z0 - z1))
-            * ((y0 - y1)*(z0 - z2) - (y0 - y2)*(z0 - z1)));
-
+        const float a012 = vecCross.norm();
         // Compute the denominator of the Equation (2)
-        const float l12 = std::sqrt(
-            (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2)
-            + (z1 - z2) * (z1 - z2));
+        const float l12 = vecJL.norm();
 
         // Compute the normal vector (la, lb, lc) of the edge line, i.e.,
         // the vector from the projection of the point (x0, y0, z0) on
         // the edge line between points (x1, y1, z1) and (x2, y2, z2)
         // to the point (x0, y0, z0)
-        const float la = (
-            (y1 - y2) * ((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1))
-            + (z1 - z2) * ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1)))
-            / a012 / l12;
-        const float lb = -(
-            (x1 - x2) * ((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1))
-            - (z1 - z2) * ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1)))
-            / a012 / l12;
-        const float lc = -(
-            (x1 - x2) * ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1))
-            + (y1 - y2) * ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1)))
-            / a012 / l12;
-
+        const Eigen::Vector3f vecNormal = vecJL.cross(vecCross) / a012 / l12;
         // Compute the point-to-line distance using the Equation (2),
         // i.e., the distance from the corner point in the current scan
         // (x0, y0, z0) to the edge lines between (x1, y1, z1) and
@@ -988,6 +950,7 @@ void BasicLaserMapping::computeCornerDistances()
         // the map cloud
         const float ld2 = a012 / l12;
 
+        // Compute the bisquare weight
         const float s = 1.0f - 0.9f * std::fabs(ld2);
 
         if (s <= 0.1f)
@@ -995,9 +958,7 @@ void BasicLaserMapping::computeCornerDistances()
 
         // Compute the coefficient for the pose optimization
         pcl::PointXYZI coeff;
-        coeff.x = s * la;
-        coeff.y = s * lb;
-        coeff.z = s * lc;
+        coeff.getVector3fMap() = s * vecNormal;
         coeff.intensity = s * ld2;
 
         this->_laserCloudOri.push_back(pointOri);
@@ -1044,51 +1005,35 @@ void BasicLaserMapping::computePlaneDistances()
         for (int j = 0; j < 5; ++j) {
             const pcl::PointXYZI& neighborPoint =
                 this->_laserCloudSurfFromMap->at(pointSearchInd[j]);
-            matA0(j, 0) = neighborPoint.x;
-            matA0(j, 1) = neighborPoint.y;
-            matA0(j, 2) = neighborPoint.z;
+            matA0.row(j) = neighborPoint.getVector3fMap();
         }
 
         // Compute the normal vector (pa, pb, pc) that is perpenidcular to
         // the plane defined by a set of neighbor points `pointSearchInd`
-        const Eigen::Vector3f matX0 = matA0.colPivHouseholderQr().solve(matB0);
-
-        float pa = matX0(0, 0);
-        float pb = matX0(1, 0);
-        float pc = matX0(2, 0);
-        float pd = 1.0f;
+        const Eigen::Vector3f vecX0 = matA0.colPivHouseholderQr().solve(matB0);
 
         // Normalize the normal vector (pa, pb, pc) of the plane
-        const float ps = std::sqrt(pa * pa + pb * pb + pc * pc);
-        pa /= ps;
-        pb /= ps;
-        pc /= ps;
-        pd /= ps;
+        const float ps = vecX0.norm();
+        const float pd = 1.0f / ps;
+        const Eigen::Vector3f vecNormal = vecX0 / ps;
 
         // If all neighbor points `pointSearchInd` are on the same plane,
         // then the distance between the neighbor point and the plane
         // should be closer to zero
-        bool planeValid = true;
-        for (int j = 0; j < 5; ++j) {
-            const pcl::PointXYZI& neighborPoint =
-                this->_laserCloudSurfFromMap->at(pointSearchInd[j]);
-            const float dist = pa * neighborPoint.x + pb * neighborPoint.y
-                               + pc * neighborPoint.z + pd;
+        const Eigen::Matrix<float, 1, 5> pointToPlaneDists =
+            (vecNormal.transpose() * matA0.transpose()).array() + pd;
 
-            if (std::abs(dist) > 0.2f) {
-                planeValid = false;
-                break;
-            }
-        }
-
-        if (!planeValid)
+        // If a distance between a neighbor point and the plane is larger
+        // than 0.2, then the neighbor points are not on the same plane
+        if ((pointToPlaneDists.cwiseAbs().array() > 0.2f).any())
             continue;
 
         // Compute the d_h using the Equation (3)
         // Note that the distance below could be negative
-        const float pd2 = pa * pointSel.x + pb * pointSel.y
-                          + pc * pointSel.z + pd;
+        const float pd2 = vecNormal.transpose()
+                          * pointSel.getVector3fMap() + pd;
 
+        // Compute the bisquare weight
         const float s = 1.0f - 0.9f * std::fabs(pd2)
                         / std::sqrt(calcPointDistance(pointSel));
 
@@ -1096,9 +1041,7 @@ void BasicLaserMapping::computePlaneDistances()
             continue;
 
         pcl::PointXYZI coeff;
-        coeff.x = s * pa;
-        coeff.y = s * pb;
-        coeff.z = s * pc;
+        coeff.getVector3fMap() = s * vecNormal;
         coeff.intensity = s * pd2;
 
         this->_laserCloudOri.push_back(pointOri);
