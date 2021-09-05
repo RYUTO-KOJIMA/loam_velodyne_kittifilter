@@ -293,16 +293,8 @@ void BasicLaserOdometry::performOptimization()
         // `matA` is the Jacobian matrix in Equation (12)
         Eigen::Matrix<float, Eigen::Dynamic, 6> matA(pointSelNum, 6);
         Eigen::Matrix<float, 6, Eigen::Dynamic> matAt(6, pointSelNum);
-        // `matAtA` is the Hessian matrix (J^T J) in Equation (12)
-        // Note that the damping factor is not used in this implementation
-        Eigen::Matrix<float, 6, 6> matAtA;
         // `matB` is the distance vector (-d) in Equation (12)
-        Eigen::VectorXf matB(pointSelNum);
-        // `matAtB` is the residual vector (-J^T d) in Equation (12)
-        Eigen::Matrix<float, 6, 1> matAtB;
-        // `matX` is the solution to `matAtA` * `matX` = `matAtB`,
-        // which is used for updating the current transformation
-        Eigen::Matrix<float, 6, 1> matX;
+        Eigen::VectorXf vecB(pointSelNum);
 
         for (int i = 0; i < pointSelNum; ++i) {
             const auto& pointOri = this->_laserCloudOri->points[i];
@@ -333,13 +325,12 @@ void BasicLaserOdometry::performOptimization()
                 s * partialZFromRotationYXZT(rotX, rotY, rotZ);
 
             // Create a position vector of a point
-            const Eigen::Vector3f vecPoint {
-                pointOri.x, pointOri.y, pointOri.z };
+            pcl::Vector3fMapConst vecPoint = pointOri.getVector3fMap();
             // Create an intermediate vector
             const Eigen::Vector3f vecPointTrans = vecPoint - vecTrans;
 
             // Create a coefficient vector
-            const Eigen::Vector3f vecCoeff { coeff.x, coeff.y, coeff.z };
+            pcl::Vector3fMapConst vecCoeff = coeff.getVector3fMap();
             // Compute a partial derivative of the point-to-edge or
             // point-to-plane distance with respect to the translation
             const Eigen::Vector3f vecGradTrans =
@@ -351,21 +342,27 @@ void BasicLaserOdometry::performOptimization()
                 (rotationMatParY * vecPointTrans).transpose() * vecCoeff,
                 (rotationMatParZ * vecPointTrans).transpose() * vecCoeff };
 
-            // Point-to-edge or point-to-line distance
-            const float d2 = coeff.intensity;
-
             matA.block<1, 3>(i, 0) = vecGradRot;
             matA.block<1, 3>(i, 3) = vecGradTrans;
+
+            // Point-to-edge or point-to-plane distance is stored in the
+            // intensity field in the coefficient
             // Reverse the sign of the residual to follow Gauss-Newton method
-            matB(i, 0) = -0.05 * d2;
+            vecB(i, 0) = -0.05 * coeff.intensity;
         }
 
         matAt = matA.transpose();
-        matAtA = matAt * matA;
-        matAtB = matAt * matB;
+        // `matAtA` is the Hessian matrix (J^T J) in Equation (12)
+        // Note that the damping factor is not used in this implementation
+        const Eigen::Matrix<float, 6, 6> matAtA = matAt * matA;
+        // `matAtB` is the residual vector (-J^T d) in Equation (12)
+        const Eigen::VectorXf vecAtB = matAt * vecB;
 
         // Compute the increment to the current transformation
-        matX = matAtA.colPivHouseholderQr().solve(matAtB);
+        // `matX` is the solution to `matAtA` * `matX` = `matAtB`,
+        // which is used for updating the current transformation
+        Eigen::Matrix<float, 6, 1> vecX =
+            matAtA.colPivHouseholderQr().solve(vecAtB);
 
         // Check the occurrence of the degeneration
         if (iter == 0)
@@ -373,17 +370,17 @@ void BasicLaserOdometry::performOptimization()
 
         // Do not update the transformation along the degenerate direction
         if (isDegenerate) {
-            Eigen::Matrix<float, 6, 1> matX2(matX);
-            matX = matP * matX2;
+            Eigen::Matrix<float, 6, 1> matX2(vecX);
+            vecX = matP * matX2;
         }
 
         // Update the transformation (rotation and translation)
-        this->_transform.rot_x = this->_transform.rot_x.rad() + matX(0, 0);
-        this->_transform.rot_y = this->_transform.rot_y.rad() + matX(1, 0);
-        this->_transform.rot_z = this->_transform.rot_z.rad() + matX(2, 0);
-        this->_transform.pos.x() += matX(3, 0);
-        this->_transform.pos.y() += matX(4, 0);
-        this->_transform.pos.z() += matX(5, 0);
+        this->_transform.rot_x = this->_transform.rot_x.rad() + vecX(0, 0);
+        this->_transform.rot_y = this->_transform.rot_y.rad() + vecX(1, 0);
+        this->_transform.rot_z = this->_transform.rot_z.rad() + vecX(2, 0);
+        this->_transform.pos.x() += vecX(3, 0);
+        this->_transform.pos.y() += vecX(4, 0);
+        this->_transform.pos.z() += vecX(5, 0);
 
         // Reset the transformation if values are invalid (NaN or infinity)
         if (!std::isfinite(this->_transform.rot_x.rad()))
@@ -402,13 +399,13 @@ void BasicLaserOdometry::performOptimization()
 
         // Compute the increment in degrees and centimeters
         const float deltaR = std::sqrt(
-            std::pow(rad2deg(matX(0, 0)), 2)
-            + std::pow(rad2deg(matX(1, 0)), 2)
-            + std::pow(rad2deg(matX(2, 0)), 2));
+            std::pow(rad2deg(vecX(0, 0)), 2)
+            + std::pow(rad2deg(vecX(1, 0)), 2)
+            + std::pow(rad2deg(vecX(2, 0)), 2));
         const float deltaT = std::sqrt(
-            std::pow(matX(3, 0) * 100, 2)
-            + std::pow(matX(4, 0) * 100, 2)
-            + std::pow(matX(5, 0) * 100, 2));
+            std::pow(vecX(3, 0) * 100, 2)
+            + std::pow(vecX(4, 0) * 100, 2)
+            + std::pow(vecX(5, 0) * 100, 2));
 
         // Terminate the Gauss-Newton method if the increment is small
         if (deltaR < this->_deltaRAbort && deltaT < this->_deltaTAbort)
