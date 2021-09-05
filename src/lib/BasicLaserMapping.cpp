@@ -217,9 +217,10 @@ void BasicLaserMapping::transformUpdate()
     this->_transformAftMapped = this->_transformTobeMapped;
 }
 
-void BasicLaserMapping::pointAssociateToMap(
-    const pcl::PointXYZI& pi, pcl::PointXYZI& po)
+pcl::PointXYZI BasicLaserMapping::pointAssociateToMap(
+    const pcl::PointXYZI& pi)
 {
+    pcl::PointXYZI po;
     po.x = pi.x;
     po.y = pi.y;
     po.z = pi.z;
@@ -233,11 +234,14 @@ void BasicLaserMapping::pointAssociateToMap(
     po.x += this->_transformTobeMapped.pos.x();
     po.y += this->_transformTobeMapped.pos.y();
     po.z += this->_transformTobeMapped.pos.z();
+
+    return po;
 }
 
-void BasicLaserMapping::pointAssociateTobeMapped(
-    const pcl::PointXYZI& pi, pcl::PointXYZI& po)
+pcl::PointXYZI BasicLaserMapping::pointAssociateTobeMapped(
+    const pcl::PointXYZI& pi)
 {
+    pcl::PointXYZI po;
     po.x = pi.x - this->_transformTobeMapped.pos.x();
     po.y = pi.y - this->_transformTobeMapped.pos.y();
     po.z = pi.z - this->_transformTobeMapped.pos.z();
@@ -247,13 +251,15 @@ void BasicLaserMapping::pointAssociateTobeMapped(
               -this->_transformTobeMapped.rot_y,
               -this->_transformTobeMapped.rot_x,
               -this->_transformTobeMapped.rot_z);
+
+    return po;
 }
 
 void BasicLaserMapping::transformFullResToMap()
 {
     // Transform full resolution input cloud to map
     for (auto& pt : *this->_laserCloudFullRes)
-        this->pointAssociateToMap(pt, pt);
+        pt = this->pointAssociateToMap(pt);
 }
 
 bool BasicLaserMapping::createDownsizedMap()
@@ -323,7 +329,7 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
     pointOnYAxis.x = 0.0f;
     pointOnYAxis.y = 10.0f;
     pointOnYAxis.z = 0.0f;
-    this->pointAssociateToMap(pointOnYAxis, pointOnYAxis);
+    pointOnYAxis = this->pointAssociateToMap(pointOnYAxis);
 
     // `CUBE_SIZE` and `CUBE_HALF` are in centimeters (50cm and 25cm)
     const auto CUBE_SIZE = 50.0f;
@@ -458,9 +464,8 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
     // Store downsized corner stack points in corresponding cube clouds
     for (int i = 0; i < this->_laserCloudCornerStackDS->size(); ++i) {
         // Convert the point coordinates from the scan frame to the map frame
-        pcl::PointXYZI pointSel;
-        this->pointAssociateToMap(
-            this->_laserCloudCornerStackDS->points[i], pointSel);
+        const pcl::PointXYZI pointSel = this->pointAssociateToMap(
+            this->_laserCloudCornerStackDS->points[i]);
 
         // Compute the index of the cube corresponding to the point
         Eigen::Vector3i cubeIdx;
@@ -479,9 +484,8 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
 
     // Store downsized surface stack points in corresponding cube clouds
     for (int i = 0; i < this->_laserCloudSurfStackDS->size(); ++i) {
-        pcl::PointXYZI pointSel;
-        this->pointAssociateToMap(
-            this->_laserCloudSurfStackDS->points[i], pointSel);
+        const pcl::PointXYZI pointSel = this->pointAssociateToMap(
+            this->_laserCloudSurfStackDS->points[i]);
 
         Eigen::Vector3i cubeIdx;
         this->toVoxelIndex(CUBE_SIZE, CUBE_HALF,
@@ -868,8 +872,7 @@ void BasicLaserMapping::computeCornerDistances()
         // Convert the corner point coordinates in the scan coordinate frame
         // at t_(k + 2) to the mapped coordinate frame using the current pose
         // estimate, i.e., `_transformTobeMapped`
-        pcl::PointXYZI pointSel;
-        this->pointAssociateToMap(pointOri, pointSel);
+        const pcl::PointXYZI pointSel = this->pointAssociateToMap(pointOri);
         // Find the 5 closest neighbors in the map cloud
         kdtreeCornerFromMap.nearestKSearch(
             pointSel, 5, pointSearchInd, pointSearchSqDis);
@@ -982,8 +985,7 @@ void BasicLaserMapping::computePlaneDistances()
         // Convert the planar point coordinates in the scan coordinate frame
         // at t_(k + 2) to the mapped coordinate frame using the current pose
         // estimate
-        pcl::PointXYZI pointSel;
-        this->pointAssociateToMap(pointOri, pointSel);
+        const pcl::PointXYZI pointSel = this->pointAssociateToMap(pointOri);
         // Find the 5 closest neighbors in the map cloud
         kdtreeSurfFromMap.nearestKSearch(
             pointSel, 5, pointSearchInd, pointSearchSqDis);

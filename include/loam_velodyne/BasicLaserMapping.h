@@ -122,11 +122,11 @@ private:
     // Transform the input point `pi` in the scan coordinate at t_(k + 2) to
     // the point `po` in the mapped coordinate frame, where t_(k + 2) is the
     // timestamp of the end of the sweep at t_(k + 1)
-    void pointAssociateToMap(const pcl::PointXYZI& pi, pcl::PointXYZI& po);
+    pcl::PointXYZI pointAssociateToMap(const pcl::PointXYZI& pi);
     // Transform the input point `pi` in the mapped coordinate frame to the
     // point `po` in the scan coordinate at t_(k + 2), where t_(k + 2) is the
     // timestamp of the next scan (end time of the current scan)
-    void pointAssociateTobeMapped(const pcl::PointXYZI& pi, pcl::PointXYZI& po);
+    pcl::PointXYZI pointAssociateTobeMapped(const pcl::PointXYZI& pi);
 
     void transformFullResToMap();
 
