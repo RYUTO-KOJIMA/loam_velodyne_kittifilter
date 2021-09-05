@@ -56,7 +56,7 @@ private:
      * @param pi The point to transform
      * @param po The point instance for storing the result
      */
-    void transformToStart(const pcl::PointXYZI& pi, pcl::PointXYZI& po);
+    pcl::PointXYZI transformToStart(const pcl::PointXYZI& pi);
 
     // Compute three rotation matrices, R_al = Ry(aly) Rx(alx) Rz(alz),
     // R_bl = Ry(bly) Rx(blx) Rz(blz), and R_bc = Ry(bcy) Rx(bcx) Rz(bcz)

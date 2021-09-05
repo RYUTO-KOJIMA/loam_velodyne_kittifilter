@@ -32,12 +32,12 @@ BasicLaserOdometry::BasicLaserOdometry(
 {
 }
 
-void BasicLaserOdometry::transformToStart(
-    const pcl::PointXYZI& pi, pcl::PointXYZI& po)
+pcl::PointXYZI BasicLaserOdometry::transformToStart(const pcl::PointXYZI& pi)
 {
     const float relTime = pi.intensity - static_cast<int>(pi.intensity);
     const float s = (1.0f / this->_scanPeriod) * relTime;
 
+    pcl::PointXYZI po;
     po.x = pi.x - s * this->_transform.pos.x();
     po.y = pi.y - s * this->_transform.pos.y();
     po.z = pi.z - s * this->_transform.pos.z();
@@ -47,6 +47,8 @@ void BasicLaserOdometry::transformToStart(
     Angle ry = -s * this->_transform.rot_y.rad();
     Angle rz = -s * this->_transform.rot_z.rad();
     rotateZXY(po, rz, rx, ry);
+
+    return po;
 }
 
 std::size_t BasicLaserOdometry::transformToEnd(
@@ -469,8 +471,8 @@ void BasicLaserOdometry::computeCornerDistances(int iterCount)
     for (int i = 0; i < cornerPointsSharpNum; ++i) {
         // Reproject the corner point in the current scan to the beginning
         // of the current sweep (point `i` in the paper)
-        pcl::PointXYZI pointSel;
-        this->transformToStart(this->_cornerPointsSharp->points[i], pointSel);
+        const pcl::PointXYZI pointSel =
+            this->transformToStart(this->_cornerPointsSharp->points[i]);
 
         if (this->_pointSearchCornerInd2[i] < 0)
             continue;
@@ -555,8 +557,8 @@ void BasicLaserOdometry::findCornerCorrespondence()
     for (int i = 0; i < cornerPointsSharpNum; ++i) {
         // Reproject the corner point in the current scan to the beginning
         // of the current sweep (point `i` in the paper)
-        pcl::PointXYZI pointSel;
-        this->transformToStart(this->_cornerPointsSharp->points[i], pointSel);
+        const pcl::PointXYZI pointSel =
+            this->transformToStart(this->_cornerPointsSharp->points[i]);
 
         // Find the closest point in the last scan for `pointSel`,
         // which is the point `j` in the paper
@@ -656,8 +658,8 @@ void BasicLaserOdometry::computePlaneDistances(int iterCount)
     for (int i = 0; i < surfPointsFlatNum; ++i) {
         // Reproject the planar point in the current scan to the beginning
         // of the current sweep (point `i` in the paper)
-        pcl::PointXYZI pointSel;
-        this->transformToStart(this->_surfPointsFlat->points[i], pointSel);
+        const pcl::PointXYZI pointSel =
+            this->transformToStart(this->_surfPointsFlat->points[i]);
 
         if (this->_pointSearchSurfInd2[i] < 0 ||
             this->_pointSearchSurfInd3[i] < 0)
@@ -751,8 +753,8 @@ void BasicLaserOdometry::findPlaneCorrespondence()
     for (int i = 0; i < surfPointsFlatNum; ++i) {
         // Reproject the planar point in the current scan to the beginning
         // of the current sweep (point `i` in the paper)
-        pcl::PointXYZI pointSel;
-        this->transformToStart(this->_surfPointsFlat->points[i], pointSel);
+        const pcl::PointXYZI pointSel =
+            this->transformToStart(this->_surfPointsFlat->points[i]);
 
         // Find the closest point in the last scan for `pointSel`,
         // which is the point `j` in the paper
