@@ -18,7 +18,7 @@ namespace loam {
  */
 inline double rad2deg(double radians)
 {
-  return radians * 180.0 / M_PI;
+    return radians * 180.0 / M_PI;
 }
 
 /** \brief Convert the given radian angle to degrees.
