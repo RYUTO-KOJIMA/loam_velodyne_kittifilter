@@ -713,9 +713,6 @@ void BasicLaserMapping::optimizeTransformTobeMapped()
     kdtreeCornerFromMap.setInputCloud(this->_laserCloudCornerFromMap);
     kdtreeSurfFromMap.setInputCloud(this->_laserCloudSurfFromMap);
 
-    Eigen::Matrix3f matV1;
-    matV1.setZero();
-
     bool isDegenerate = false;
     Eigen::Matrix<float, 6, 6> matP;
 
@@ -731,120 +728,93 @@ void BasicLaserMapping::optimizeTransformTobeMapped()
         // correspondences
         this->computePlaneDistances();
 
-        const float srx = this->_transformTobeMapped.rot_x.sin();
-        const float crx = this->_transformTobeMapped.rot_x.cos();
-        const float sry = this->_transformTobeMapped.rot_y.sin();
-        const float cry = this->_transformTobeMapped.rot_y.cos();
-        const float srz = this->_transformTobeMapped.rot_z.sin();
-        const float crz = this->_transformTobeMapped.rot_z.cos();
-
         const std::size_t laserCloudSelNum = this->_laserCloudOri.size();
 
         if (laserCloudSelNum < 50)
             continue;
 
+        const float rotX = this->_transformTobeMapped.rot_x.rad();
+        const float rotY = this->_transformTobeMapped.rot_y.rad();
+        const float rotZ = this->_transformTobeMapped.rot_z.rad();
+
+        // Create a rotation matrix from `_transformTobeMapped`
+        const Eigen::Matrix3f rotationMatTobeMapped =
+            rotationMatrixZXY(rotX, rotY, rotZ);
+        // Compute partial derivatives of the rotation matrix above
+        const Eigen::Matrix3f rotationMatParX =
+            partialXFromRotationZXY(rotX, rotY, rotZ);
+        const Eigen::Matrix3f rotationMatParY =
+            partialYFromRotationZXY(rotX, rotY, rotZ);
+        const Eigen::Matrix3f rotationMatParZ =
+            partialZFromRotationZXY(rotX, rotY, rotZ);
+
         // `matA` is the Jacobian matrix in Equation (12)
         Eigen::Matrix<float, Eigen::Dynamic, 6> matA(laserCloudSelNum, 6);
         Eigen::Matrix<float, 6, Eigen::Dynamic> matAt(6, laserCloudSelNum);
-        // `matAtA` is the Hessian matrix (J^T J) in Equation (12)
-        Eigen::Matrix<float, 6, 6> matAtA;
         // `matB` is the distance vector (d) in Equation (12)
-        Eigen::VectorXf matB(laserCloudSelNum);
-        // `matAtB` is the residual vector (J^T d) in Equation (12)
-        Eigen::VectorXf matAtB;
-        Eigen::VectorXf matX;
+        Eigen::VectorXf vecB(laserCloudSelNum);
 
         for (int i = 0; i < laserCloudSelNum; ++i) {
             const pcl::PointXYZI& pointOri = this->_laserCloudOri.points[i];
             const pcl::PointXYZI& coeff = this->_coeffSel.points[i];
 
-            const float arx = (crx*sry*srz*pointOri.x + crx * crz*sry*pointOri.y - srx * sry*pointOri.z) * coeff.x
-                + (-srx * srz*pointOri.x - crz * srx*pointOri.y - crx * pointOri.z) * coeff.y
-                + (crx*cry*srz*pointOri.x + crx * cry*crz*pointOri.y - cry * srx*pointOri.z) * coeff.z;
+            // Compute a partial derivative of the point-to-edge or
+            // point-to-plane distance with respect to the rotation
+            pcl::Vector3fMapConst vecPoint = pointOri.getVector3fMap();
+            pcl::Vector3fMapConst vecCoeff = coeff.getVector3fMap();
+            const Eigen::Vector3f vecGradRot {
+                (rotationMatParX * vecPoint).transpose() * vecCoeff,
+                (rotationMatParY * vecPoint).transpose() * vecCoeff,
+                (rotationMatParZ * vecPoint).transpose() * vecCoeff };
+            matA.block<1, 3>(i, 0) = vecGradRot;
 
-            const float ary = ((cry*srx*srz - crz * sry)*pointOri.x
-                        + (sry*srz + cry * crz*srx)*pointOri.y + crx * cry*pointOri.z) * coeff.x
-                + ((-cry * crz - srx * sry*srz)*pointOri.x
-                + (cry*srz - crz * srx*sry)*pointOri.y - crx * sry*pointOri.z) * coeff.z;
+            // Partial derivative of the point-to-edge or point-to-plane
+            // distance with respect to the translation equals to the
+            // coefficient, i.e., the normal vector, which is already obtained
+            matA.block<1, 3>(i, 3) = vecCoeff;
 
-            const float arz = ((crz*srx*sry - cry * srz)*pointOri.x + (-cry * crz - srx * sry*srz)*pointOri.y)*coeff.x
-                + (crx*crz*pointOri.x - crx * srz*pointOri.y) * coeff.y
-                + ((sry*srz + cry * crz*srx)*pointOri.x + (crz*sry - cry * srx*srz)*pointOri.y)*coeff.z;
-
-            matA(i, 0) = arx;
-            matA(i, 1) = ary;
-            matA(i, 2) = arz;
-            matA(i, 3) = coeff.x;
-            matA(i, 4) = coeff.y;
-            matA(i, 5) = coeff.z;
+            // Point-to-edge or point-to-plane distance is stored in the
+            // intensity field in the coefficient
             // Reverse the sign of the residual to follow Gauss-Newton method
-            matB(i, 0) = -coeff.intensity;
+            vecB(i, 0) = -coeff.intensity;
         }
 
         matAt = matA.transpose();
-        matAtA = matAt * matA;
-        matAtB = matAt * matB;
-
+        // `matAtA` is the Hessian matrix (J^T J) in Equation (12)
+        const Eigen::Matrix<float, 6, 6> matAtA = matAt * matA;
+        // `matAtB` is the residual vector (J^T d) in Equation (12)
+        const Eigen::VectorXf vecAtB = matAt * vecB;
         // Compute the increment to the current transformation
-        matX = matAtA.colPivHouseholderQr().solve(matAtB);
+        Eigen::Matrix<float, 6, 1> vecX =
+            matAtA.colPivHouseholderQr().solve(vecAtB);
 
-        // Check the occurrence of the degeneration following the paper:
-        // Ji Zhang, Michael Kaess, and Sanjiv Singh. "On Degeneracy of
-        // Optimization-based State Estimation Problems," in the Proceedings
-        // of the IEEE International Conference on Robotics and Automation
-        // (ICRA), 2016.
-        if (iter == 0) {
-            // Compute the eigenvalues and eigenvectors of the Hessian matrix
-            Eigen::SelfAdjointEigenSolver<Eigen::Matrix<float, 6, 6>>
-                eigenSolver(matAtA);
-            const Eigen::Matrix<float, 1, 6> matE =
-                eigenSolver.eigenvalues().real();
-            const Eigen::Matrix<float, 6, 6> matV =
-                eigenSolver.eigenvectors().real();
-            Eigen::Matrix<float, 6, 6> matV2 = matV;
+        // Check the occurrence of the degeneration
+        if (iter == 0)
+            isDegenerate = this->checkDegeneration(matAtA, matP);
 
-            isDegenerate = false;
-            const float eigenThreshold[6] = { 100, 100, 100, 100, 100, 100 };
-
-            // Eigenvalues are sorted in the increasing order
-            // Detect the occurrence of the degeneration if one of the
-            // eigenvalues is less than 100
-            for (int i = 0; i < 6; ++i) {
-                if (matE(0, i) < eigenThreshold[i]) {
-                    matV2.row(i).setZero();
-                    isDegenerate = true;
-                } else {
-                    break;
-                }
-            }
-
-            // Do not update the transformation along the degenerate direction
-            matP = matV.inverse() * matV2;
-        }
-
+        // Do not update the transformation along the degenerate direction
         if (isDegenerate) {
-            // Do not update the transformation along the degenerate direction
-            Eigen::Matrix<float, 6, 1> matX2(matX);
-            matX = matP * matX2;
+            Eigen::Matrix<float, 6, 1> vecX2(vecX);
+            vecX = matP * vecX2;
         }
 
         // Update the transformation (rotation and translation)
-        this->_transformTobeMapped.rot_x += matX(0, 0);
-        this->_transformTobeMapped.rot_y += matX(1, 0);
-        this->_transformTobeMapped.rot_z += matX(2, 0);
-        this->_transformTobeMapped.pos.x() += matX(3, 0);
-        this->_transformTobeMapped.pos.y() += matX(4, 0);
-        this->_transformTobeMapped.pos.z() += matX(5, 0);
+        this->_transformTobeMapped.rot_x += vecX(0, 0);
+        this->_transformTobeMapped.rot_y += vecX(1, 0);
+        this->_transformTobeMapped.rot_z += vecX(2, 0);
+        this->_transformTobeMapped.pos.x() += vecX(3, 0);
+        this->_transformTobeMapped.pos.y() += vecX(4, 0);
+        this->_transformTobeMapped.pos.z() += vecX(5, 0);
 
         // Compute the increment in degrees and centimeters
         const float deltaR = std::sqrt(
-            std::pow(rad2deg(matX(0, 0)), 2)
-            + std::pow(rad2deg(matX(1, 0)), 2)
-            + std::pow(rad2deg(matX(2, 0)), 2));
+            std::pow(rad2deg(vecX(0, 0)), 2)
+            + std::pow(rad2deg(vecX(1, 0)), 2)
+            + std::pow(rad2deg(vecX(2, 0)), 2));
         const float deltaT = std::sqrt(
-            std::pow(matX(3, 0) * 100, 2)
-            + std::pow(matX(4, 0) * 100, 2)
-            + std::pow(matX(5, 0) * 100, 2));
+            std::pow(vecX(3, 0) * 100, 2)
+            + std::pow(vecX(4, 0) * 100, 2)
+            + std::pow(vecX(5, 0) * 100, 2));
 
         // Terminate the Gauss-Newton method if the increment is small
         if (deltaR < this->_deltaRAbort && deltaT < this->_deltaTAbort)
@@ -853,6 +823,45 @@ void BasicLaserMapping::optimizeTransformTobeMapped()
 
     // Refine the transformation using IMU data and update the transformation
     this->transformUpdate();
+}
+
+// Check the occurrence of the degeneration
+bool BasicLaserMapping::checkDegeneration(
+    const Eigen::Matrix<float, 6, 6>& hessianMat,
+    Eigen::Matrix<float, 6, 6>& projectionMat) const
+{
+    // Check the occurrence of the degeneration following the paper:
+    // Ji Zhang, Michael Kaess, and Sanjiv Singh. "On Degeneracy of
+    // Optimization-based State Estimation Problems," in the Proceedings of the
+    // IEEE International Conference on Robotics and Automation (ICRA), 2016.
+
+    // Compute the eigenvalues and eigenvectors of the Hessian matrix
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix<float, 6, 6>> eigenSolver;
+    eigenSolver.compute(hessianMat);
+
+    const Eigen::Matrix<float, 1, 6> matE = eigenSolver.eigenvalues().real();
+    const Eigen::Matrix<float, 6, 6> matV = eigenSolver.eigenvectors().real();
+    Eigen::Matrix<float, 6, 6> matV2 = matV;
+
+    bool isDegenerate = false;
+    const float eigenThreshold[6] = { 100, 100, 100, 100, 100, 100 };
+
+    // Eigenvalues are sorted in the increasing order
+    // Detect the occurrence of the degeneration if one of the eigenvalues is
+    // less than 100
+    for (int i = 0; i < 6; ++i) {
+        if (matE(0, i) < eigenThreshold[i]) {
+            matV2.row(i).setZero();
+            isDegenerate = true;
+        } else {
+            break;
+        }
+    }
+
+    // Do not update the transformation along the degenerate direction
+    projectionMat = matV.inverse() * matV2;
+
+    return isDegenerate;
 }
 
 // Compute the distances and coefficients from the point-to-edge

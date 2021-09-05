@@ -148,6 +148,9 @@ private:
                       const float tx, const float ty, const float tz,
                       int& idxI, int& idxJ, int& idxK) const;
 
+    // Check the occurrence of the degeneration
+    bool checkDegeneration(const Eigen::Matrix<float, 6, 6>& hessianMat,
+                           Eigen::Matrix<float, 6, 6>& projectionMat) const;
     // Compute the distances and coefficients from the point-to-edge
     // correspondences
     void computeCornerDistances();
