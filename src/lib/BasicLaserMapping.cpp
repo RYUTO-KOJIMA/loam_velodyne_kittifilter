@@ -43,12 +43,6 @@
 
 namespace loam {
 
-using std::sqrt;
-using std::fabs;
-using std::asin;
-using std::atan2;
-using std::pow;
-
 std::vector<Eigen::Vector3i> computeSurroundIndices()
 {
     std::vector<Eigen::Vector3i> surroundIndices;
