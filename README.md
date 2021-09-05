@@ -9,6 +9,10 @@ All sources were taken from [ROS documentation](http://docs.ros.org/indigo/api/l
 
 Ask questions [here](https://github.com/laboshinl/loam_velodyne/issues/3).
 
+## Topics, Nodes, and TFs
+![Topics](/rosgraph-loam-velodyne.png)
+![TFs](/frames-loam-velodyne.png)
+
 ## How to build with catkin
 
 ```
