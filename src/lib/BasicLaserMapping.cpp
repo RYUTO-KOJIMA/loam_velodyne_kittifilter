@@ -94,17 +94,11 @@ BasicLaserMapping::BasicLaserMapping(const float scanPeriod,
     // Setup cloud vectors
     this->_laserCloudCornerArray.resize(this->_laserCloudNum);
     this->_laserCloudSurfArray.resize(this->_laserCloudNum);
-    this->_laserCloudCornerDSArray.resize(this->_laserCloudNum);
-    this->_laserCloudSurfDSArray.resize(this->_laserCloudNum);
 
     for (std::size_t i = 0; i < this->_laserCloudNum; ++i) {
         this->_laserCloudCornerArray[i].reset(
             new pcl::PointCloud<pcl::PointXYZI>());
         this->_laserCloudSurfArray[i].reset(
-            new pcl::PointCloud<pcl::PointXYZI>());
-        this->_laserCloudCornerDSArray[i].reset(
-            new pcl::PointCloud<pcl::PointXYZI>());
-        this->_laserCloudSurfDSArray[i].reset(
             new pcl::PointCloud<pcl::PointXYZI>());
     }
 
@@ -645,26 +639,18 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
     }
 
     // Downsize all valid (within field of view) feature cube clouds
-    // TODO: `_laserCloudCornerDSArray` and `_laserCloudSurfDSArray` are
-    // not necessary
     for (const auto& ind : this->_laserCloudValidInd) {
-        this->_laserCloudCornerDSArray[ind]->clear();
+        pcl::PointCloud<pcl::PointXYZI> downsampledCornerCloud;
         this->_downSizeFilterCorner.setInputCloud(
             this->_laserCloudCornerArray[ind]);
-        this->_downSizeFilterCorner.filter(
-            *this->_laserCloudCornerDSArray[ind]);
+        this->_downSizeFilterCorner.filter(downsampledCornerCloud);
+        *this->_laserCloudCornerArray[ind] = std::move(downsampledCornerCloud);
 
-        this->_laserCloudSurfDSArray[ind]->clear();
+        pcl::PointCloud<pcl::PointXYZI> downsampledSurfCloud;
         this->_downSizeFilterSurf.setInputCloud(
             this->_laserCloudSurfArray[ind]);
-        this->_downSizeFilterSurf.filter(
-            *this->_laserCloudSurfDSArray[ind]);
-
-        // Swap cube clouds for next processing
-        this->_laserCloudCornerArray[ind].swap(
-            this->_laserCloudCornerDSArray[ind]);
-        this->_laserCloudSurfArray[ind].swap(
-            this->_laserCloudSurfDSArray[ind]);
+        this->_downSizeFilterSurf.filter(downsampledSurfCloud);
+        *this->_laserCloudSurfArray[ind] = std::move(downsampledSurfCloud);
     }
 
     this->transformFullResToMap();

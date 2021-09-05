@@ -233,10 +233,6 @@ private:
     std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> _laserCloudCornerArray;
     // Map with voxels for the surface point cloud around the current pose
     std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> _laserCloudSurfArray;
-    // Voxels for downsampled corner point cloud
-    std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> _laserCloudCornerDSArray;
-    // Voxels for downsampled surface point cloud
-    std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> _laserCloudSurfDSArray;
 
     // Indices of the voxels in the field of view
     std::vector<std::size_t> _laserCloudValidInd;
