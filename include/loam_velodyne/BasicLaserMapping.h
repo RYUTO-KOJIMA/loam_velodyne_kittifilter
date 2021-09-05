@@ -148,6 +148,13 @@ private:
                       const float tx, const float ty, const float tz,
                       int& idxI, int& idxJ, int& idxK) const;
 
+    // Shift the map voxels along X axis
+    void shiftMapVoxelsX(Eigen::Vector3i& centerCubeIdx);
+    // Shift the map voxels along Y axis
+    void shiftMapVoxelsY(Eigen::Vector3i& centerCubeIdx);
+    // Shift the map voxels along Z axis
+    void shiftMapVoxelsZ(Eigen::Vector3i& centerCubeIdx);
+
     // Check the occurrence of the degeneration
     bool checkDegeneration(const Eigen::Matrix<float, 6, 6>& hessianMat,
                            Eigen::Matrix<float, 6, 6>& projectionMat) const;

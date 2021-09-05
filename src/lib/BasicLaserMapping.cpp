@@ -362,138 +362,11 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
                        centerCubeIdx.y(),
                        centerCubeIdx.z());
 
-    // Slide the cubes in `_laserCloudCornerArray` and `_laserCloudSurfArray`
-    // along X axis to constrain the `centerCubeIdx.x()` to be within the range
-    // of [3, `_laserCloudWidth` - 3)
-    while (centerCubeIdx.x() < 3) {
-        for (int j = 0; j < this->_laserCloudHeight; ++j) {
-            for (int k = 0; k < this->_laserCloudDepth; ++k) {
-                for (int i = this->_laserCloudWidth - 1; i >= 1; --i) {
-                    const std::size_t indexA = this->toIndex(i, j, k);
-                    const std::size_t indexB = this->toIndex(i - 1, j, k);
-                    /* Only the pointers are swapped */
-                    std::swap(this->_laserCloudCornerArray[indexA],
-                              this->_laserCloudCornerArray[indexB]);
-                    std::swap(this->_laserCloudSurfArray[indexA],
-                              this->_laserCloudSurfArray[indexB]);
-                }
-                const std::size_t indexC = this->toIndex(0, j, k);
-                this->_laserCloudCornerArray[indexC]->clear();
-                this->_laserCloudSurfArray[indexC]->clear();
-            }
-        }
-        ++centerCubeIdx.x();
-        ++this->_laserCloudCenWidth;
-    }
-
-    while (centerCubeIdx.x() >= this->_laserCloudWidth - 3) {
-        for (int j = 0; j < this->_laserCloudHeight; ++j) {
-            for (int k = 0; k < this->_laserCloudDepth; ++k) {
-                for (int i = 0; i < this->_laserCloudWidth - 1; ++i) {
-                    const std::size_t indexA = this->toIndex(i, j, k);
-                    const std::size_t indexB = this->toIndex(i + 1, j, k);
-                    std::swap(this->_laserCloudCornerArray[indexA],
-                              this->_laserCloudCornerArray[indexB]);
-                    std::swap(this->_laserCloudSurfArray[indexA],
-                              this->_laserCloudSurfArray[indexB]);
-                }
-                const std::size_t indexC =
-                    this->toIndex(this->_laserCloudWidth - 1, j, k);
-                this->_laserCloudCornerArray[indexC]->clear();
-                this->_laserCloudSurfArray[indexC]->clear();
-            }
-        }
-        --centerCubeIdx.x();
-        --this->_laserCloudCenWidth;
-    }
-
-    // Slide the cubes in `_laserCloudCornerArray` and `_laserCloudSurfArray`
-    // along Y axis to constrain the `centerCubeIdx.y()` to be within the range
-    // of [3, `_laserCloudHeight` - 3)
-    while (centerCubeIdx.y() < 3) {
-        for (int i = 0; i < this->_laserCloudWidth; ++i) {
-            for (int k = 0; k < this->_laserCloudDepth; ++k) {
-                for (int j = this->_laserCloudHeight - 1; j >= 1; --j) {
-                    const std::size_t indexA = this->toIndex(i, j, k);
-                    const std::size_t indexB = this->toIndex(i, j - 1, k);
-                    std::swap(this->_laserCloudCornerArray[indexA],
-                              this->_laserCloudCornerArray[indexB]);
-                    std::swap(this->_laserCloudSurfArray[indexA],
-                              this->_laserCloudSurfArray[indexB]);
-                }
-                const std::size_t indexC = this->toIndex(i, 0, k);
-                this->_laserCloudCornerArray[indexC]->clear();
-                this->_laserCloudSurfArray[indexC]->clear();
-            }
-        }
-        ++centerCubeIdx.y();
-        ++this->_laserCloudCenHeight;
-    }
-
-    while (centerCubeIdx.y() >= this->_laserCloudHeight - 3) {
-        for (int i = 0; i < this->_laserCloudWidth; ++i) {
-            for (int k = 0; k < this->_laserCloudDepth; ++k) {
-                for (int j = 0; j < this->_laserCloudHeight - 1; ++j) {
-                    const std::size_t indexA = this->toIndex(i, j, k);
-                    const std::size_t indexB = this->toIndex(i, j + 1, k);
-                    std::swap(this->_laserCloudCornerArray[indexA],
-                              this->_laserCloudCornerArray[indexB]);
-                    std::swap(this->_laserCloudSurfArray[indexA],
-                              this->_laserCloudSurfArray[indexB]);
-                }
-                const std::size_t indexC =
-                    this->toIndex(i, this->_laserCloudHeight - 1, k);
-                this->_laserCloudCornerArray[indexC]->clear();
-                this->_laserCloudSurfArray[indexC]->clear();
-            }
-        }
-        --centerCubeIdx.y();
-        --this->_laserCloudCenHeight;
-    }
-
-    // Slide the cubes in `_laserCloudCornerArray` and `_laserCloudSurfArray`
-    // along Z axis to constrain the `centerCubeIdx.z()` to be within the range
-    // of [3, `_laserCloudDepth` - 3)
-    while (centerCubeIdx.z() < 3) {
-        for (int i = 0; i < this->_laserCloudWidth; ++i) {
-            for (int j = 0; j < this->_laserCloudHeight; ++j) {
-                for (int k = this->_laserCloudDepth - 1; k >= 1; --k) {
-                    const std::size_t indexA = this->toIndex(i, j, k);
-                    const std::size_t indexB = this->toIndex(i, j, k - 1);
-                    std::swap(this->_laserCloudCornerArray[indexA],
-                              this->_laserCloudCornerArray[indexB]);
-                    std::swap(this->_laserCloudSurfArray[indexA],
-                              this->_laserCloudSurfArray[indexB]);
-                }
-                const std::size_t indexC = this->toIndex(i, j, 0);
-                this->_laserCloudCornerArray[indexC]->clear();
-                this->_laserCloudSurfArray[indexC]->clear();
-            }
-        }
-        ++centerCubeIdx.z();
-        ++this->_laserCloudCenDepth;
-    }
-
-    while (centerCubeIdx.z() >= this->_laserCloudDepth - 3) {
-        for (int i = 0; i < this->_laserCloudWidth; ++i) {
-            for (int j = 0; j < this->_laserCloudHeight; ++j) {
-                for (int k = 0; k < this->_laserCloudDepth - 1; ++k) {
-                    const std::size_t indexA = this->toIndex(i, j, k);
-                    const std::size_t indexB = this->toIndex(i, j, k + 1);
-                    std::swap(this->_laserCloudCornerArray[indexA],
-                              this->_laserCloudCornerArray[indexB]);
-                    std::swap(this->_laserCloudSurfArray[indexA],
-                              this->_laserCloudSurfArray[indexB]);
-                }
-                const std::size_t indexC =
-                    this->toIndex(i, j, this->_laserCloudDepth - 1);
-                this->_laserCloudCornerArray[indexC]->clear();
-                this->_laserCloudSurfArray[indexC]->clear();
-            }
-        }
-        --centerCubeIdx.z();
-        --this->_laserCloudCenDepth;
-    }
+    // Shift the map voxels so that the voxel corresponding to the pose at
+    // t_(k + 2), `_transformTobeMapped`, is closer to the center of the map
+    this->shiftMapVoxelsX(centerCubeIdx);
+    this->shiftMapVoxelsY(centerCubeIdx);
+    this->shiftMapVoxelsZ(centerCubeIdx);
 
     // `_laserCloudValidInd` and `_laserCloudSurroundInd` contain 125 cube
     // indices at most when all cubes around the center cube (i, j, k)
@@ -657,6 +530,151 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
     this->_downsizedMapCreated = this->createDownsizedMap();
 
     return true;
+}
+
+// Shift the map voxels along X axis
+void BasicLaserMapping::shiftMapVoxelsX(Eigen::Vector3i& centerCubeIdx)
+{
+    // Slide the cubes in `_laserCloudCornerArray` and `_laserCloudSurfArray`
+    // along X axis to constrain the `centerCubeIdx.x()` to be within the range
+    // of [3, `_laserCloudWidth` - 3)
+    while (centerCubeIdx.x() < 3) {
+        for (int j = 0; j < this->_laserCloudHeight; ++j) {
+            for (int k = 0; k < this->_laserCloudDepth; ++k) {
+                for (int i = this->_laserCloudWidth - 1; i >= 1; --i) {
+                    const std::size_t indexA = this->toIndex(i, j, k);
+                    const std::size_t indexB = this->toIndex(i - 1, j, k);
+                    /* Only the pointers are swapped */
+                    std::swap(this->_laserCloudCornerArray[indexA],
+                              this->_laserCloudCornerArray[indexB]);
+                    std::swap(this->_laserCloudSurfArray[indexA],
+                              this->_laserCloudSurfArray[indexB]);
+                }
+                const std::size_t indexC = this->toIndex(0, j, k);
+                this->_laserCloudCornerArray[indexC]->clear();
+                this->_laserCloudSurfArray[indexC]->clear();
+            }
+        }
+        ++centerCubeIdx.x();
+        ++this->_laserCloudCenWidth;
+    }
+
+    while (centerCubeIdx.x() >= this->_laserCloudWidth - 3) {
+        for (int j = 0; j < this->_laserCloudHeight; ++j) {
+            for (int k = 0; k < this->_laserCloudDepth; ++k) {
+                for (int i = 0; i < this->_laserCloudWidth - 1; ++i) {
+                    const std::size_t indexA = this->toIndex(i, j, k);
+                    const std::size_t indexB = this->toIndex(i + 1, j, k);
+                    std::swap(this->_laserCloudCornerArray[indexA],
+                              this->_laserCloudCornerArray[indexB]);
+                    std::swap(this->_laserCloudSurfArray[indexA],
+                              this->_laserCloudSurfArray[indexB]);
+                }
+                const std::size_t indexC =
+                    this->toIndex(this->_laserCloudWidth - 1, j, k);
+                this->_laserCloudCornerArray[indexC]->clear();
+                this->_laserCloudSurfArray[indexC]->clear();
+            }
+        }
+        --centerCubeIdx.x();
+        --this->_laserCloudCenWidth;
+    }
+}
+
+// Shift the map voxels along Y axis
+void BasicLaserMapping::shiftMapVoxelsY(Eigen::Vector3i& centerCubeIdx)
+{
+    // Slide the cubes in `_laserCloudCornerArray` and `_laserCloudSurfArray`
+    // along Y axis to constrain the `centerCubeIdx.y()` to be within the range
+    // of [3, `_laserCloudHeight` - 3)
+    while (centerCubeIdx.y() < 3) {
+        for (int i = 0; i < this->_laserCloudWidth; ++i) {
+            for (int k = 0; k < this->_laserCloudDepth; ++k) {
+                for (int j = this->_laserCloudHeight - 1; j >= 1; --j) {
+                    const std::size_t indexA = this->toIndex(i, j, k);
+                    const std::size_t indexB = this->toIndex(i, j - 1, k);
+                    std::swap(this->_laserCloudCornerArray[indexA],
+                              this->_laserCloudCornerArray[indexB]);
+                    std::swap(this->_laserCloudSurfArray[indexA],
+                              this->_laserCloudSurfArray[indexB]);
+                }
+                const std::size_t indexC = this->toIndex(i, 0, k);
+                this->_laserCloudCornerArray[indexC]->clear();
+                this->_laserCloudSurfArray[indexC]->clear();
+            }
+        }
+        ++centerCubeIdx.y();
+        ++this->_laserCloudCenHeight;
+    }
+
+    while (centerCubeIdx.y() >= this->_laserCloudHeight - 3) {
+        for (int i = 0; i < this->_laserCloudWidth; ++i) {
+            for (int k = 0; k < this->_laserCloudDepth; ++k) {
+                for (int j = 0; j < this->_laserCloudHeight - 1; ++j) {
+                    const std::size_t indexA = this->toIndex(i, j, k);
+                    const std::size_t indexB = this->toIndex(i, j + 1, k);
+                    std::swap(this->_laserCloudCornerArray[indexA],
+                              this->_laserCloudCornerArray[indexB]);
+                    std::swap(this->_laserCloudSurfArray[indexA],
+                              this->_laserCloudSurfArray[indexB]);
+                }
+                const std::size_t indexC =
+                    this->toIndex(i, this->_laserCloudHeight - 1, k);
+                this->_laserCloudCornerArray[indexC]->clear();
+                this->_laserCloudSurfArray[indexC]->clear();
+            }
+        }
+        --centerCubeIdx.y();
+        --this->_laserCloudCenHeight;
+    }
+}
+
+// Shift the map voxels along Z axis
+void BasicLaserMapping::shiftMapVoxelsZ(Eigen::Vector3i& centerCubeIdx)
+{
+    // Slide the cubes in `_laserCloudCornerArray` and `_laserCloudSurfArray`
+    // along Z axis to constrain the `centerCubeIdx.z()` to be within the range
+    // of [3, `_laserCloudDepth` - 3)
+    while (centerCubeIdx.z() < 3) {
+        for (int i = 0; i < this->_laserCloudWidth; ++i) {
+            for (int j = 0; j < this->_laserCloudHeight; ++j) {
+                for (int k = this->_laserCloudDepth - 1; k >= 1; --k) {
+                    const std::size_t indexA = this->toIndex(i, j, k);
+                    const std::size_t indexB = this->toIndex(i, j, k - 1);
+                    std::swap(this->_laserCloudCornerArray[indexA],
+                              this->_laserCloudCornerArray[indexB]);
+                    std::swap(this->_laserCloudSurfArray[indexA],
+                              this->_laserCloudSurfArray[indexB]);
+                }
+                const std::size_t indexC = this->toIndex(i, j, 0);
+                this->_laserCloudCornerArray[indexC]->clear();
+                this->_laserCloudSurfArray[indexC]->clear();
+            }
+        }
+        ++centerCubeIdx.z();
+        ++this->_laserCloudCenDepth;
+    }
+
+    while (centerCubeIdx.z() >= this->_laserCloudDepth - 3) {
+        for (int i = 0; i < this->_laserCloudWidth; ++i) {
+            for (int j = 0; j < this->_laserCloudHeight; ++j) {
+                for (int k = 0; k < this->_laserCloudDepth - 1; ++k) {
+                    const std::size_t indexA = this->toIndex(i, j, k);
+                    const std::size_t indexB = this->toIndex(i, j, k + 1);
+                    std::swap(this->_laserCloudCornerArray[indexA],
+                              this->_laserCloudCornerArray[indexB]);
+                    std::swap(this->_laserCloudSurfArray[indexA],
+                              this->_laserCloudSurfArray[indexB]);
+                }
+                const std::size_t indexC =
+                    this->toIndex(i, j, this->_laserCloudDepth - 1);
+                this->_laserCloudCornerArray[indexC]->clear();
+                this->_laserCloudSurfArray[indexC]->clear();
+            }
+        }
+        --centerCubeIdx.z();
+        --this->_laserCloudCenDepth;
+    }
 }
 
 void BasicLaserMapping::updateIMU(const IMUState2& newState)
