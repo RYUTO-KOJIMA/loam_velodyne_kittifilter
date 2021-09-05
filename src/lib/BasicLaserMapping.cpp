@@ -314,28 +314,10 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
     // sweep contains only one scan in this implementation)
     this->_laserOdometryTime = laserOdometryTime;
 
-    pcl::PointXYZI pointSel;
-
     // Relate incoming data to map
     // Compute the poses of the scans at t_(k + 1) and t_(k + 2) in the mapped
     // coordinate frame, i.e., `_transformAftMapped` and `_transformTobeMapped`
     this->transformAssociateToMap();
-
-    // `_laserCloudCornerLast` and `_laserCloudSurfLast` are the sets of
-    // corner and planar points in the scan at time t_(k + 1), and points in
-    // `_laserCloudCornerLast` and `_laserCloudSurfLast` are reprojected to
-    // the t_(k + 2), and `_transformTobeMapped` is used to transform the
-    // coordinate at t_(k + 2) to the mapped coordinate frame
-
-    for (const auto& pt : this->_laserCloudCornerLast->points) {
-        this->pointAssociateToMap(pt, pointSel);
-        this->_laserCloudCornerStack->push_back(pointSel);
-    }
-
-    for (const auto& pt : this->_laserCloudSurfLast->points) {
-        this->pointAssociateToMap(pt, pointSel);
-        this->_laserCloudSurfStack->push_back(pointSel);
-    }
 
     pcl::PointXYZI pointOnYAxis;
     pointOnYAxis.x = 0.0f;
@@ -445,17 +427,18 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
     }
 
     // Prepare feature stack clouds for pose optimization
-    // Convert the point coordinates from the mapped coordinate frame to the
-    // scan coordinate frame at t_(k + 2)
-    // After `pointAssociateTobeMapped()`, `_laserCloudCornerStack` is
-    // basically the same as `_laserCloudCornerLast`
-    for (auto& pt : *this->_laserCloudCornerStack)
-        this->pointAssociateTobeMapped(pt, pt);
-
-    // After `pointAssociateTobeMapped()`, `_laserCloudSurfStack` is
-    // basically the same as `_laserCloudSurfLast`
-    for (auto& pt : *this->_laserCloudSurfStack)
-        this->pointAssociateTobeMapped(pt, pt);
+    // `_laserCloudCornerLast` and `_laserCloudSurfLast` are the sets of
+    // corner and planar points in the scan at time t_(k + 1), and points in
+    // `_laserCloudCornerLast` and `_laserCloudSurfLast` are reprojected to
+    // the scan coordinate frame at t_(k + 2)
+    this->_laserCloudCornerStack->insert(
+        this->_laserCloudCornerStack->end(),
+        this->_laserCloudCornerLast->begin(),
+        this->_laserCloudCornerLast->end());
+    this->_laserCloudSurfStack->insert(
+        this->_laserCloudSurfStack->end(),
+        this->_laserCloudSurfLast->begin(),
+        this->_laserCloudSurfLast->end());
 
     // Downsample feature stack clouds
     this->_laserCloudCornerStackDS->clear();
@@ -475,6 +458,7 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
     // Store downsized corner stack points in corresponding cube clouds
     for (int i = 0; i < this->_laserCloudCornerStackDS->size(); ++i) {
         // Convert the point coordinates from the scan frame to the map frame
+        pcl::PointXYZI pointSel;
         this->pointAssociateToMap(
             this->_laserCloudCornerStackDS->points[i], pointSel);
 
@@ -495,6 +479,7 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
 
     // Store downsized surface stack points in corresponding cube clouds
     for (int i = 0; i < this->_laserCloudSurfStackDS->size(); ++i) {
+        pcl::PointXYZI pointSel;
         this->pointAssociateToMap(
             this->_laserCloudSurfStackDS->points[i], pointSel);
 
