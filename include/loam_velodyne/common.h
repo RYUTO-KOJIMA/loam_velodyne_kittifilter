@@ -74,7 +74,7 @@ template <typename PointT>
 inline void removeNaNFromPointCloud(
     typename pcl::PointCloud<PointT>::Ptr& cloud)
 {
-    pcl::Indices indices;
+    std::vector<int> indices;
     pcl::removeNaNFromPointCloud<PointT>(*cloud, *cloud, indices);
 }
 
