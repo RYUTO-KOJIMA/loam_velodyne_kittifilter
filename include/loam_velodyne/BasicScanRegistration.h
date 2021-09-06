@@ -121,6 +121,9 @@ struct IMUState
         result.velocity = start.velocity * invRatio + end.velocity * ratio;
         result.position = start.position * invRatio + end.position * ratio;
     }
+
+    // Define operator new() to return the aligned pointer
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
 
 class BasicScanRegistration
