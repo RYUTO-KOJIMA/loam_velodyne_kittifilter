@@ -4,7 +4,7 @@
 #include "loam_velodyne/BasicLaserOdometry.h"
 #include "loam_velodyne/Common.h"
 #include "loam_velodyne/Transform.hpp"
-#include "math_utils.h"
+#include "loam_velodyne/MathUtils.h"
 
 #include <pcl/filters/filter.h>
 #include <Eigen/Eigenvalues>

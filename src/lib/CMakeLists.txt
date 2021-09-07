@@ -2,7 +2,6 @@
 # CMakeLists.txt
 
 add_library(loam
-    math_utils.h
     ScanRegistration.cpp
     BasicScanRegistration.cpp
     MultiScanRegistration.cpp

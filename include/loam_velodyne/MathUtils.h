@@ -1,5 +1,5 @@
 
-// math_utils.h
+// MathUtils.h
 
 #ifndef LOAM_MATH_UTILS_H
 #define LOAM_MATH_UTILS_H

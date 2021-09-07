@@ -34,7 +34,7 @@
 //     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
 
 #include "loam_velodyne/ScanRegistration.h"
-#include "math_utils.h"
+#include "loam_velodyne/MathUtils.h"
 
 #include <tf/transform_datatypes.h>
 
