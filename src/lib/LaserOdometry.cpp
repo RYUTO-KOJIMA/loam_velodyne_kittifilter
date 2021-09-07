@@ -36,7 +36,7 @@
 #include <pcl/filters/filter.h>
 
 #include "loam_velodyne/LaserOdometry.h"
-#include "loam_velodyne/common.h"
+#include "loam_velodyne/Common.h"
 #include "math_utils.h"
 
 namespace loam {

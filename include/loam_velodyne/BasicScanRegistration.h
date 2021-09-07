@@ -8,7 +8,7 @@
 
 #include <pcl/point_cloud.h>
 
-#include "common.h"
+#include "loam_velodyne/Common.h"
 #include "Angle.h"
 #include "Vector3.h"
 #include "CircularBuffer.h"

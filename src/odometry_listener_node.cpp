@@ -17,7 +17,7 @@
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
 
-#include "loam_velodyne/common.h"
+#include "loam_velodyne/Common.h"
 #include "loam_velodyne/Twist.h"
 
 #include "loam_velodyne/SaveOdometry.h"

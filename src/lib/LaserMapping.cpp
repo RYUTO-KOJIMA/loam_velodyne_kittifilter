@@ -34,7 +34,7 @@
 //     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
 
 #include "loam_velodyne/LaserMapping.h"
-#include "loam_velodyne/common.h"
+#include "loam_velodyne/Common.h"
 
 namespace loam {
 

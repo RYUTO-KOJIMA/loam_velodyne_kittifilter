@@ -35,7 +35,7 @@
 
 #pragma once
 
-#include "loam_velodyne/common.h"
+#include "loam_velodyne/Common.h"
 #include "loam_velodyne/Twist.h"
 #include "loam_velodyne/CircularBuffer.h"
 

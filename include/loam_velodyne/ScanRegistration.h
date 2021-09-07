@@ -41,7 +41,7 @@
 #include <ros/node_handle.h>
 #include <sensor_msgs/Imu.h>
 
-#include "common.h"
+#include "loam_velodyne/Common.h"
 #include "BasicScanRegistration.h"
 
 namespace loam {

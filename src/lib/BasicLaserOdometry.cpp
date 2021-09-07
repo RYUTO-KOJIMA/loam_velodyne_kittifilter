@@ -2,7 +2,7 @@
 // BasicLaserOdometry.cpp
 
 #include "loam_velodyne/BasicLaserOdometry.h"
-#include "loam_velodyne/common.h"
+#include "loam_velodyne/Common.h"
 #include "loam_velodyne/Transform.hpp"
 #include "math_utils.h"
 

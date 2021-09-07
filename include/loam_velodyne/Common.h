@@ -1,5 +1,5 @@
 
-// common.h
+// Common.h
 
 // Copyright 2013, Ji Zhang, Carnegie Mellon University
 // Further contributions copyright (c) 2016, Southwest Research Institute

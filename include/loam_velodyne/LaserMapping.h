@@ -37,7 +37,7 @@
 #define LOAM_LASER_MAPPING_H
 
 #include "loam_velodyne/BasicLaserMapping.h"
-#include "loam_velodyne/common.h"
+#include "loam_velodyne/Common.h"
 
 #include <ros/ros.h>
 #include <nav_msgs/Odometry.h>
