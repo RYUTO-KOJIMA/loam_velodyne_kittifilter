@@ -4,8 +4,8 @@
 #ifndef LOAM_TWIST_H
 #define LOAM_TWIST_H
 
-#include "Angle.h"
-#include "Vector3.h"
+#include "loam_velodyne/Angle.h"
+#include "loam_velodyne/Vector3.h"
 
 namespace loam {
 

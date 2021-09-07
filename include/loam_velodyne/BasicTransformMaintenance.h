@@ -35,7 +35,7 @@
 
 #pragma once
 
-#include "Twist.h"
+#include "loam_velodyne/Twist.h"
 
 namespace loam {
 

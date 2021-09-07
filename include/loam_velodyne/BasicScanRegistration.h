@@ -9,9 +9,9 @@
 #include <pcl/point_cloud.h>
 
 #include "loam_velodyne/Common.h"
-#include "Angle.h"
-#include "Vector3.h"
-#include "CircularBuffer.h"
+#include "loam_velodyne/Angle.h"
+#include "loam_velodyne/Vector3.h"
+#include "loam_velodyne/CircularBuffer.h"
 
 namespace loam {
 

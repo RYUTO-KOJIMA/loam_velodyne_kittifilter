@@ -42,7 +42,7 @@
 #include <sensor_msgs/Imu.h>
 
 #include "loam_velodyne/Common.h"
-#include "BasicScanRegistration.h"
+#include "loam_velodyne/BasicScanRegistration.h"
 
 namespace loam {
 
