@@ -144,7 +144,7 @@ public:
 
 private:
     // System startup delay counter
-    int _systemDelay = 20;
+    int _systemDelay;
     // Mapper for mapping vertical point angles to scan ring IDs
     MultiScanMapper _scanMapper;
     // Full resolution point cloud grouped by rings (vertical angles)

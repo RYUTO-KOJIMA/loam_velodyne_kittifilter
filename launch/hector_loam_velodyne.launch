@@ -4,6 +4,7 @@
 
     <node pkg="loam_velodyne" type="multiScanRegistration"
           name="multiScanRegistration" output="screen">
+        <param name="systemDelay" value="0" />
         <param name="lidar" value="VLP-16" />
         <param name="scanPeriod" value="$(arg scanPeriod)" />
 

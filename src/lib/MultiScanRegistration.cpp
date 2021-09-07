@@ -62,6 +62,7 @@ void MultiScanMapper::set(const float lowerBound,
 
 MultiScanRegistration::MultiScanRegistration(
     const MultiScanMapper& scanMapper) :
+    _systemDelay(0),
     _scanMapper(scanMapper)
 {
 }
@@ -83,6 +84,16 @@ bool MultiScanRegistration::setupROS(
 {
     if (!ScanRegistration::setupROS(node, privateNode, configOut))
         return false;
+
+    // Get the number of initial frames to skip
+    int systemDelay;
+    if (!privateNode.getParam("systemDelay", systemDelay)) {
+        ROS_ERROR("Number of the initial frames to skip should be specified "
+                  "in systemDelay parameter");
+        return false;
+    }
+
+    this->_systemDelay = systemDelay;
 
     // Fetch scan mapping params
     std::string lidarName;
