@@ -8,6 +8,7 @@ find_package(catkin REQUIRED COMPONENTS
     geometry_msgs
     nav_msgs
     sensor_msgs
+    rosbag
     roscpp
     rospy
     std_msgs
@@ -31,11 +32,12 @@ generate_messages(
 include_directories(
     include
     ${catkin_INCLUDE_DIRS}
+    ${rosbag_INCLUDE_DIRS}
     #${EIGEN3_INCLUDE_DIR}
     ${PCL_INCLUDE_DIRS})
 
 catkin_package(
-    CATKIN_DEPENDS geometry_msgs nav_msgs roscpp rospy
+    CATKIN_DEPENDS geometry_msgs nav_msgs rosbag roscpp rospy
         std_msgs tf pcl_conversions
     DEPENDS EIGEN3 PCL
     INCLUDE_DIRS include
@@ -63,11 +65,15 @@ target_link_libraries(laserMapping
 
 add_executable(transformMaintenance src/transform_maintenance_node.cpp)
 target_link_libraries(transformMaintenance
-    ${catkin_LIBRARIES} ${PCL_LIBRARIES} loam )
+    ${catkin_LIBRARIES} ${PCL_LIBRARIES} loam)
 
 add_executable(odometryListener src/odometry_listener_node.cpp)
 target_link_libraries(odometryListener ${catkin_LIBRARIES} loam)
 add_dependencies(odometryListener loam_velodyne_gencpp)
+
+add_executable(kittiOdometry2Bag src/kitti_odometry_to_bag.cpp)
+target_link_libraries(kittiOdometry2Bag
+    ${catkin_LIBRARIES} loam_kitti stdc++fs)
 
 if (CATKIN_ENABLE_TESTING)
     find_package(rostest REQUIRED)
