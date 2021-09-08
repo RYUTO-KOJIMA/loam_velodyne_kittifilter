@@ -46,6 +46,7 @@ catkin_package(
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+add_subdirectory(src/kitti)
 add_subdirectory(src/lib)
 
 add_executable(multiScanRegistration src/multi_scan_registration_node.cpp)
