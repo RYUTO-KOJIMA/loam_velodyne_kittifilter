@@ -47,12 +47,8 @@ struct TwistTimed
 std::string TwistTimed::ToString() const
 {
     std::stringstream strStream;
-    strStream << std::fixed << std::setprecision(6);
 
-    const double timestamp = static_cast<double>(this->mTimestamp.sec)
-                             + static_cast<double>(this->mTimestamp.nsec) / 1e9;
-
-    strStream << timestamp << ' '
+    strStream << this->mTimestamp.toNSec() << ' '
               << this->mTwist.pos.x() << ' '
               << this->mTwist.pos.y() << ' '
               << this->mTwist.pos.z() << ' '
