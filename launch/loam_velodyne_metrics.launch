@@ -1,0 +1,38 @@
+<launch>
+    <arg name="rviz" default="true" />
+    <arg name="scanPeriod" default="0.1" />
+
+    <node pkg="loam_velodyne" type="multiScanRegistration"
+          name="multiScanRegistration" output="screen">
+        <param name="systemDelay" value="0" />
+        <param name="lidar" value="VLP-16" />
+        <param name="scanPeriod" value="$(arg scanPeriod)" />
+        <param name="publishMetrics" value="true" />
+        <remap from="/multi_scan_points" to="/velodyne_points" />
+    </node>
+
+    <node pkg="loam_velodyne" type="laserOdometry"
+          name="laserOdometry" output="screen" respawn="true">
+        <param name="scanPeriod" value="$(arg scanPeriod)" />
+        <param name="publishMetrics" value="true" />
+    </node>
+
+    <node pkg="loam_velodyne" type="laserMapping"
+          name="laserMapping" output="screen">
+        <param name="scanPeriod" value="$(arg scanPeriod)" />
+        <param name="publishMetrics" value="true" />
+    </node>
+
+    <node pkg="loam_velodyne" type="transformMaintenance"
+          name="transformMaintenance" output="screen">
+        <param name="publishMetrics" value="true" />
+    </node>
+
+    <node pkg="loam_velodyne" type="odometryListener"
+          name="odometryListener" output="screen" />
+
+    <group if="$(arg rviz)">
+        <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz"
+              args="-d $(find loam_velodyne)/rviz_cfg/loam_velodyne.rviz" />
+    </group>
+</launch>
