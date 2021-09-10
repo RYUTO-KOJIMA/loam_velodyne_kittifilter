@@ -28,6 +28,16 @@ void BasicScanRegistration::processScanlines(
         this->_scanIndices.push_back(range);
     }
 
+    // Collect the metrics
+    this->_metricsMsg.sweep_start_stamp = toROSTime(this->_sweepStart);
+    this->_metricsMsg.num_of_full_res_points = this->_laserCloud.size();
+
+    this->_metricsMsg.num_of_points_in_rings.clear();
+    std::transform(laserCloudScans.begin(), laserCloudScans.end(),
+                   std::back_inserter(this->_metricsMsg.num_of_points_in_rings),
+                   [](const pcl::PointCloud<pcl::PointXYZI>& cloud) {
+                       return static_cast<std::uint32_t>(cloud.size()); });
+
     this->extractFeatures();
     this->updateIMUTransform();
 }
@@ -168,8 +178,12 @@ void BasicScanRegistration::interpolateIMUStateFor(
 
 void BasicScanRegistration::extractFeatures(const std::uint16_t beginIdx)
 {
+    const ros::Time startTime = ros::Time::now();
+
     // Extract features from individual scans
     const std::size_t nScans = this->_scanIndices.size();
+
+    std::size_t numOfOriginalLessFlatPoints = 0;
 
     for (std::size_t i = beginIdx; i < nScans; ++i) {
         pcl::PointCloud<pcl::PointXYZI>::Ptr surfPointsLessFlatScan {
@@ -267,7 +281,22 @@ void BasicScanRegistration::extractFeatures(const std::uint16_t beginIdx)
                                    this->_config.lessFlatFilterSize);
         downSizeFilter.filter(surfPointsLessFlatScanDS);
         this->_surfacePointsLessFlat += surfPointsLessFlatScanDS;
+        numOfOriginalLessFlatPoints += surfPointsLessFlatScan->size();
     }
+
+    // Collect the metrics
+    const ros::Time endTime = ros::Time::now();
+    this->_metricsMsg.feature_extraction_time = endTime - startTime;
+    this->_metricsMsg.num_of_sharp_points =
+        this->_cornerPointsSharp.size();
+    this->_metricsMsg.num_of_less_sharp_points =
+        this->_cornerPointsLessSharp.size();
+    this->_metricsMsg.num_of_flat_points =
+        this->_surfacePointsFlat.size();
+    this->_metricsMsg.num_of_less_flat_points_before_ds =
+        numOfOriginalLessFlatPoints;
+    this->_metricsMsg.num_of_less_flat_points =
+        this->_surfacePointsLessFlat.size();
 }
 
 void BasicScanRegistration::updateIMUTransform()
@@ -432,6 +461,25 @@ void BasicScanRegistration::markAsPicked(
 
         this->_scanNeighborPicked[scanIdx - i] = 1;
     }
+}
+
+// Clear the metrics message
+void BasicScanRegistration::clearMetricsMsg()
+{
+    this->_metricsMsg.point_extraction_time = ros::Duration(0.0);
+    this->_metricsMsg.point_cloud_stamp = ros::Time(0.0);
+    this->_metricsMsg.num_of_unprocessed_points = 0;
+
+    this->_metricsMsg.sweep_start_stamp = ros::Time(0.0);
+    this->_metricsMsg.num_of_full_res_points = 0;
+    this->_metricsMsg.num_of_points_in_rings.clear();
+
+    this->_metricsMsg.feature_extraction_time = ros::Duration(0.0);
+    this->_metricsMsg.num_of_sharp_points = 0;
+    this->_metricsMsg.num_of_less_sharp_points = 0;
+    this->_metricsMsg.num_of_flat_points = 0;
+    this->_metricsMsg.num_of_less_flat_points_before_ds = 0;
+    this->_metricsMsg.num_of_less_flat_points = 0;
 }
 
 } // namespace loam

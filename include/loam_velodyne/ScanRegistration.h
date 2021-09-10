@@ -99,6 +99,8 @@ private:
     ros::Publisher _pubSurfPointsLessFlat;
     // IMU transformation message publisher
     ros::Publisher _pubImuTrans;
+    // Metrics message publisher
+    ros::Publisher _pubMetrics;
 };
 
 } // namespace loam

@@ -21,6 +21,12 @@ find_package(Boost REQUIRED COMPONENTS system)
 find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED)
 
+add_message_files(
+    FILES
+    ScanRegistrationMetrics.msg
+    LaserOdometryMetrics.msg
+    LaserMappingMetrics.msg)
+
 add_service_files(
     FILES
     SaveOdometry.srv)

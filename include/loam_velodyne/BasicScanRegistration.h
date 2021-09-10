@@ -13,6 +13,8 @@
 #include "loam_velodyne/Vector3.h"
 #include "loam_velodyne/CircularBuffer.h"
 
+#include "loam_velodyne/ScanRegistrationMetrics.h"
+
 namespace loam {
 
 /** \brief A pair describing the start end end index of a range. */
@@ -232,6 +234,16 @@ private:
     void interpolateIMUStateFor(const float& relTime, IMUState& outputState);
 
     void updateIMUTransform();
+
+protected:
+    // Clear the metrics message
+    void clearMetricsMsg();
+
+protected:
+    // Flag to enable the metrics
+    bool _metricsEnabled;
+    // Metrics message
+    loam_velodyne::ScanRegistrationMetrics _metricsMsg;
 
 private:
     // Registration parameters

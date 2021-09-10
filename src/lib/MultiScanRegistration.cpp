@@ -157,12 +157,21 @@ void MultiScanRegistration::handleCloudMessage(
     pcl::PointCloud<pcl::PointXYZ> laserCloudIn;
     pcl::fromROSMsg(*laserCloudMsg, laserCloudIn);
 
+    // Clear the metrics
+    this->clearMetricsMsg();
+
+    // Collect the metrics
+    this->_metricsMsg.point_cloud_stamp = laserCloudMsg->header.stamp;
+    this->_metricsMsg.num_of_unprocessed_points = laserCloudIn.size();
+
     this->process(laserCloudIn, fromROSTime(laserCloudMsg->header.stamp));
 }
 
 void MultiScanRegistration::process(
     const pcl::PointCloud<pcl::PointXYZ>& laserCloudIn, const Time& scanTime)
 {
+    const ros::Time startTime = ros::Time::now();
+
     const size_t cloudSize = laserCloudIn.size();
 
     // Determine scan start and end orientations
@@ -242,6 +251,10 @@ void MultiScanRegistration::process(
 
         this->_laserCloudScans[scanID].push_back(point);
     }
+
+    // Collect the metric
+    const ros::Time endTime = ros::Time::now();
+    this->_metricsMsg.point_extraction_time = endTime - startTime;
 
     this->processScanlines(scanTime, this->_laserCloudScans);
     this->publishResult();

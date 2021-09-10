@@ -38,6 +38,8 @@
 
 #include <tf/transform_datatypes.h>
 
+using namespace loam_velodyne;
+
 namespace loam {
 
 bool ScanRegistration::parseParams(
@@ -141,6 +143,9 @@ bool ScanRegistration::parseParams(
         }
     }
 
+    if (!nh.getParam("publishMetrics", this->_metricsEnabled))
+        this->_metricsEnabled = false;
+
     return true;
 }
 
@@ -168,6 +173,10 @@ bool ScanRegistration::setupROS(
         "/laser_cloud_less_flat", 2);
     this->_pubImuTrans = node.advertise<sensor_msgs::PointCloud2>(
         "/imu_trans", 5);
+
+    if (this->_metricsEnabled)
+        this->_pubMetrics = node.advertise<ScanRegistrationMetrics>(
+            "/scan_registration_metrics", 2);
 
     return true;
 }
@@ -223,6 +232,10 @@ void ScanRegistration::publishResult()
     // Publish corresponding IMU transformation information
     publishCloudMsg(this->_pubImuTrans,
                     this->imuTransform(), sweepStartTime, "/camera");
+
+    // Publish the metrics message
+    if (this->_metricsEnabled)
+        this->_pubMetrics.publish(this->_metricsMsg);
 }
 
 } // namespace loam
