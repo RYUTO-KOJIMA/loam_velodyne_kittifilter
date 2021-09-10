@@ -31,6 +31,9 @@
     <node pkg="loam_velodyne" type="odometryListener"
           name="odometryListener" output="screen" />
 
+    <node pkg="loam_velodyne" type="metricsListener"
+          name="metricsListener" output="screen" />
+
     <group if="$(arg rviz)">
         <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz"
               args="-d $(find loam_velodyne)/rviz_cfg/loam_velodyne.rviz" />

@@ -29,6 +29,7 @@ add_message_files(
 
 add_service_files(
     FILES
+    SaveMetrics.srv
     SaveOdometry.srv)
 
 generate_messages(
@@ -76,6 +77,10 @@ target_link_libraries(transformMaintenance
 add_executable(odometryListener src/odometry_listener_node.cpp)
 target_link_libraries(odometryListener ${catkin_LIBRARIES} loam)
 add_dependencies(odometryListener loam_velodyne_gencpp)
+
+add_executable(metricsListener src/metrics_listener_node.cpp)
+target_link_libraries(metricsListener ${catkin_LIBRARIES})
+add_dependencies(metricsListener loam_velodyne_gencpp)
 
 add_executable(kittiOdometry2Bag src/kitti_odometry_to_bag.cpp)
 target_link_libraries(kittiOdometry2Bag
