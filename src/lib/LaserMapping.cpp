@@ -36,6 +36,8 @@
 #include "loam_velodyne/LaserMapping.h"
 #include "loam_velodyne/Common.h"
 
+using namespace loam_velodyne;
+
 namespace loam {
 
 LaserMapping::LaserMapping(const float scanPeriod,
@@ -132,6 +134,9 @@ bool LaserMapping::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
         }
     }
 
+    if (!privateNode.getParam("publishMetrics", this->_metricsEnabled))
+        this->_metricsEnabled = false;
+
     // Advertise laser mapping topics
     this->_pubLaserCloudSurround = node.advertise<sensor_msgs::PointCloud2>(
         "/laser_cloud_surround", 1);
@@ -157,6 +162,10 @@ bool LaserMapping::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
     // Subscribe to IMU topic
     this->_subImu = node.subscribe<sensor_msgs::Imu>(
         "/imu/data", 50, &LaserMapping::imuHandler, this);
+
+    if (this->_metricsEnabled)
+        this->_pubMetrics = node.advertise<LaserMappingMetrics>(
+            "/laser_mapping_metrics", 2);
 
     return true;
 }
@@ -272,6 +281,9 @@ void LaserMapping::process()
 
     this->reset();
 
+    // Clear the metrics message
+    this->clearMetricsMsg();
+
     if (!BasicLaserMapping::process(fromROSTime(this->_timeLaserOdometry)))
         return;
 
@@ -281,14 +293,25 @@ void LaserMapping::process()
 void LaserMapping::publishResult()
 {
     // Publish new map cloud according to the input output ratio
-    if (this->hasFreshMap())
+    if (this->hasFreshMap()) {
         publishCloudMsg(this->_pubLaserCloudSurround,
                         this->laserCloudSurroundDS(),
                         this->_timeLaserOdometry, "camera_init");
 
+        // Collect the metrics
+        this->_metricsMsg.num_of_surround_points =
+            this->laserCloudSurroundDS().size();
+        this->_metricsMsg.num_of_surround_points_before_ds =
+            this->laserCloudSurround().size();
+    }
+
     // Publish transformed full resolution input cloud
     publishCloudMsg(this->_pubLaserCloudFullRes, this->laserCloud(),
                     this->_timeLaserOdometry, "camera_init");
+
+    // Collect the metrics
+    this->_metricsMsg.point_cloud_stamp = this->_timeLaserOdometry;
+    this->_metricsMsg.num_of_full_res_points = this->laserCloud().size();
 
     // Swap and reverse the sign of Euler angles as in LaserOdometry
     // Publish odometry after mapped transformations
@@ -325,6 +348,10 @@ void LaserMapping::publishResult()
                     this->transformAftMapped().pos.y(),
                     this->transformAftMapped().pos.z()));
     this->_tfBroadcaster.sendTransform(this->_aftMappedTrans);
+
+    // Publish the metrics message
+    if (this->_metricsEnabled)
+        this->_pubMetrics.publish(this->_metricsMsg);
 }
 
 } // end namespace loam

@@ -146,6 +146,8 @@ private:
     ros::Publisher _pubOdomAftMapped;
     // mapping odometry transform broadcaster
     tf::TransformBroadcaster _tfBroadcaster;
+    // Metrics message publisher
+    ros::Publisher _pubMetrics;
 
     // last corner cloud message subscriber
     ros::Subscriber _subLaserCloudCornerLast;

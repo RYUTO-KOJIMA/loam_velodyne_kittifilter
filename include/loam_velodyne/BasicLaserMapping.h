@@ -39,6 +39,8 @@
 #include "loam_velodyne/Twist.h"
 #include "loam_velodyne/CircularBuffer.h"
 
+#include "loam_velodyne/LaserMappingMetrics.h"
+
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/filters/voxel_grid.h>
@@ -107,6 +109,8 @@ public:
     { return this->_transformAftMapped; }
     const auto& transformBefMapped() const
     { return this->_transformBefMapped; }
+    const auto& laserCloudSurround() const
+    { return *this->_laserCloudSurround; }
     const auto& laserCloudSurroundDS() const
     { return *this->_laserCloudSurroundDS; }
 
@@ -164,6 +168,16 @@ private:
     // Compute the distances and coefficients from the point-to-plane
     // correspondences
     void computePlaneDistances();
+
+protected:
+    // Clear the metrics message
+    void clearMetricsMsg();
+
+protected:
+    // Flag to enable the metrics
+    bool _metricsEnabled;
+    // Metrics message
+    loam_velodyne::LaserMappingMetrics _metricsMsg;
 
 private:
     Time _laserOdometryTime;

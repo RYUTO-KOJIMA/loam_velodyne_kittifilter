@@ -315,6 +315,8 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
     else
         this->_frameCount = 0;
 
+    const ros::Time startTime = ros::Time::now();
+
     // `_laserOdometryTime` is actually t_(k + 1) in the paper (Section VI),
     // i.e., the timestamp of the current scan (or current sweep, since each
     // sweep contains only one scan in this implementation)
@@ -455,11 +457,29 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
     this->_downSizeFilterSurf.setInputCloud(this->_laserCloudSurfStack);
     this->_downSizeFilterSurf.filter(*this->_laserCloudSurfStackDS);
 
+    // Collect the metrics
+    this->_metricsMsg.num_of_query_sharp_points_before_ds =
+        this->_laserCloudCornerStack->size();
+    this->_metricsMsg.num_of_query_flat_points_before_ds =
+        this->_laserCloudSurfStack->size();
+
     this->_laserCloudCornerStack->clear();
     this->_laserCloudSurfStack->clear();
 
+    // Collect the metrics
+    this->_metricsMsg.num_of_query_sharp_points =
+        this->_laserCloudCornerStackDS->size();
+    this->_metricsMsg.num_of_reference_sharp_points =
+        this->_laserCloudCornerFromMap->size();
+    this->_metricsMsg.num_of_query_flat_points =
+        this->_laserCloudSurfStackDS->size();
+    this->_metricsMsg.num_of_reference_flat_points =
+        this->_laserCloudSurfFromMap->size();
+
     // Run pose optimization
-    this->optimizeTransformTobeMapped();
+    if (this->_laserCloudCornerFromMap->size() > 10 &&
+        this->_laserCloudSurfFromMap->size() > 100)
+        this->optimizeTransformTobeMapped();
 
     // Store downsized corner stack points in corresponding cube clouds
     for (int i = 0; i < this->_laserCloudCornerStackDS->size(); ++i) {
@@ -517,6 +537,10 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
 
     this->transformFullResToMap();
     this->_downsizedMapCreated = this->createDownsizedMap();
+
+    // Update the metric
+    const ros::Time endTime = ros::Time::now();
+    this->_metricsMsg.process_time = endTime - startTime;
 
     return true;
 }
@@ -693,10 +717,6 @@ nanoflann::KdTreeFLANN<pcl::PointXYZI> kdtreeSurfFromMap;
 
 void BasicLaserMapping::optimizeTransformTobeMapped()
 {
-    if (this->_laserCloudCornerFromMap->size() <= 10 ||
-        this->_laserCloudSurfFromMap->size() <= 100)
-        return;
-
     kdtreeCornerFromMap.setInputCloud(this->_laserCloudCornerFromMap);
     kdtreeSurfFromMap.setInputCloud(this->_laserCloudSurfFromMap);
 
@@ -705,6 +725,8 @@ void BasicLaserMapping::optimizeTransformTobeMapped()
 
     // Start the iterations of the Gauss-Newton method
     for (std::size_t iter = 0; iter < this->_maxIterations; ++iter) {
+        const ros::Time iterationStartTime = ros::Time::now();
+
         this->_laserCloudOri.clear();
         this->_coeffSel.clear();
 
@@ -715,10 +737,19 @@ void BasicLaserMapping::optimizeTransformTobeMapped()
         // correspondences
         this->computePlaneDistances();
 
+        // Collect the metric
+        this->_metricsMsg.num_of_correspondences.push_back(
+            this->_laserCloudOri.size());
+
         const std::size_t laserCloudSelNum = this->_laserCloudOri.size();
 
-        if (laserCloudSelNum < 50)
+        if (laserCloudSelNum < 50) {
+            // Collect the metric
+            const ros::Time iterationEndTime = ros::Time::now();
+            this->_metricsMsg.optimization_iteration_times.push_back(
+                iterationEndTime - iterationStartTime);
             continue;
+        }
 
         const float rotX = this->_transformTobeMapped.rot_x.rad();
         const float rotY = this->_transformTobeMapped.rot_y.rad();
@@ -803,10 +834,23 @@ void BasicLaserMapping::optimizeTransformTobeMapped()
             + std::pow(vecX(4, 0) * 100, 2)
             + std::pow(vecX(5, 0) * 100, 2));
 
+        // Collect the metric
+        const ros::Time iterationEndTime = ros::Time::now();
+        this->_metricsMsg.optimization_iteration_times.push_back(
+            iterationEndTime - iterationStartTime);
+
         // Terminate the Gauss-Newton method if the increment is small
         if (deltaR < this->_deltaRAbort && deltaT < this->_deltaTAbort)
             break;
     }
+
+    // Collect the metrics
+    this->_metricsMsg.optimization_time = std::accumulate(
+        this->_metricsMsg.optimization_iteration_times.begin(),
+        this->_metricsMsg.optimization_iteration_times.end(),
+        ros::Duration(0.0));
+    this->_metricsMsg.num_of_iterations =
+        this->_metricsMsg.optimization_iteration_times.size();
 
     // Refine the transformation using IMU data and update the transformation
     this->transformUpdate();
@@ -855,6 +899,10 @@ bool BasicLaserMapping::checkDegeneration(
 // correspondences
 void BasicLaserMapping::computeCornerDistances()
 {
+    const ros::Time startTime = ros::Time::now();
+
+    std::size_t numOfValidCorrespondences = 0;
+
     const std::size_t laserCloudCornerStackNum =
         this->_laserCloudCornerStackDS->size();
 
@@ -958,13 +1006,26 @@ void BasicLaserMapping::computeCornerDistances()
 
         this->_laserCloudOri.push_back(pointOri);
         this->_coeffSel.push_back(coeff);
+
+        ++numOfValidCorrespondences;
     }
+
+    // Collect the metrics
+    const ros::Time endTime = ros::Time::now();
+    this->_metricsMsg.corner_process_times.push_back(
+        endTime - startTime);
+    this->_metricsMsg.num_of_corner_correspondences.push_back(
+        numOfValidCorrespondences);
 }
 
 // Compute the distances and coefficients from the point-to-plane
 // correspondences
 void BasicLaserMapping::computePlaneDistances()
 {
+    const ros::Time startTime = ros::Time::now();
+
+    std::size_t numOfValidCorrespondences = 0;
+
     const std::size_t laserCloudSurfStackNum =
         this->_laserCloudSurfStackDS->size();
 
@@ -1040,7 +1101,44 @@ void BasicLaserMapping::computePlaneDistances()
 
         this->_laserCloudOri.push_back(pointOri);
         this->_coeffSel.push_back(coeff);
+
+        ++numOfValidCorrespondences;
     }
+
+    // Collect the metrics
+    const ros::Time endTime = ros::Time::now();
+    this->_metricsMsg.plane_process_times.push_back(
+        endTime - startTime);
+    this->_metricsMsg.num_of_plane_correspondences.push_back(
+        numOfValidCorrespondences);
+}
+
+// Clear the metrics message
+void BasicLaserMapping::clearMetricsMsg()
+{
+    this->_metricsMsg.point_cloud_stamp = ros::Time(0.0);
+    this->_metricsMsg.num_of_full_res_points = 0;
+    this->_metricsMsg.num_of_surround_points = 0;
+    this->_metricsMsg.num_of_surround_points_before_ds = 0;
+
+    this->_metricsMsg.process_time = ros::Duration(0.0);
+    this->_metricsMsg.num_of_query_sharp_points_before_ds = 0;
+    this->_metricsMsg.num_of_query_sharp_points = 0;
+    this->_metricsMsg.num_of_reference_sharp_points = 0;
+    this->_metricsMsg.num_of_query_flat_points_before_ds = 0;
+    this->_metricsMsg.num_of_query_flat_points = 0;
+    this->_metricsMsg.num_of_reference_flat_points = 0;
+
+    this->_metricsMsg.optimization_time = ros::Duration(0.0);
+    this->_metricsMsg.num_of_iterations = 0;
+    this->_metricsMsg.optimization_iteration_times.clear();
+    this->_metricsMsg.num_of_correspondences.clear();
+
+    this->_metricsMsg.corner_process_times.clear();
+    this->_metricsMsg.num_of_corner_correspondences.clear();
+
+    this->_metricsMsg.plane_process_times.clear();
+    this->_metricsMsg.num_of_plane_correspondences.clear();
 }
 
 } // namespace loam
