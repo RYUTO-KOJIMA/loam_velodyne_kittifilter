@@ -1,13 +1,14 @@
 <launch>
     <arg name="rviz" default="true" />
     <arg name="scanPeriod" default="0.1" />
+    <arg name="publishMetrics" default="true" />
 
     <node pkg="loam_velodyne" type="multiScanRegistration"
           name="multiScanRegistration" output="screen">
         <param name="systemDelay" value="0" />
         <param name="lidar" value="VLP-16" />
         <param name="scanPeriod" value="$(arg scanPeriod)" />
-        <param name="publishMetrics" value="false" />
+        <param name="publishMetrics" value="$(arg publishMetrics)" />
         <remap from="/multi_scan_points" to="/velodyne_points" />
     </node>
 </launch>
