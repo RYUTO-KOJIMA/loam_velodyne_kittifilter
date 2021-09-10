@@ -76,7 +76,7 @@ public:
     void OnIntegratedToInit(
         const nav_msgs::Odometry::ConstPtr& integratedToInit);
 
-    /* Save results to XML files */
+    /* Save the results in JSON format */
     bool SaveResults(loam_velodyne::SaveOdometry::Request& request,
                      loam_velodyne::SaveOdometry::Response& response);
 
@@ -145,7 +145,7 @@ void OdometryListener::OnIntegratedToInit(
         this->ConvertToTwistTimed(integratedToInit));
 }
 
-/* Save results to XML files */
+/* Save the results in JSON format */
 bool OdometryListener::SaveResults(
     loam_velodyne::SaveOdometry::Request& request,
     loam_velodyne::SaveOdometry::Response& response)
@@ -219,10 +219,16 @@ bool OdometryListener::SaveResults(
     }
 
     /* Write the results in JSON format */
-    pt::write_json(request.file_name, jsonResults);
-    ROS_INFO("Odometry is saved: %s", request.file_name.c_str());
+    try {
+        pt::write_json(request.file_name, jsonResults);
+        ROS_INFO("Odometry is saved to %s", request.file_name.c_str());
+        response.result = true;
+    } catch (const pt::json_parser_error& e) {
+        ROS_ERROR("Failed to save the odometry to %s, message: %s",
+                  request.file_name.c_str(), e.what());
+        response.result = false;
+    }
 
-    response.result = true;
     return true;
 }
 
