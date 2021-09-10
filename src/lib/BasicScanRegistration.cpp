@@ -466,6 +466,8 @@ void BasicScanRegistration::markAsPicked(
 // Clear the metrics message
 void BasicScanRegistration::clearMetricsMsg()
 {
+    this->_metricsMsg.stamp = ros::Time(0.0);
+
     this->_metricsMsg.point_extraction_time = ros::Duration(0.0);
     this->_metricsMsg.point_cloud_stamp = ros::Time(0.0);
     this->_metricsMsg.num_of_unprocessed_points = 0;

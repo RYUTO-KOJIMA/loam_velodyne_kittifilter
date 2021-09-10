@@ -1,6 +1,10 @@
 
 # ScanRegistrationMetrics.msg
 
+# Metrics updated in ScanRegistration::publishResult()
+# Timestamp of the message
+time stamp
+
 # Metrics updated in MultiScanRegistration
 # Processing time for extracting the valid points
 duration point_extraction_time

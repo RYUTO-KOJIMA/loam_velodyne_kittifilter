@@ -2,6 +2,8 @@
 # LaserMappingMetrics.msg
 
 # Metrics updated in LaserMapping::publishResult()
+# Timestamp of the message
+time stamp
 # Timestamp of the sweep start
 time point_cloud_stamp
 # Number of the points in the full-resolution point cloud

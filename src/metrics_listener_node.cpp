@@ -175,6 +175,8 @@ pt::ptree MetricsListener::ToPropertyTree(
 {
     pt::ptree jsonMetrics;
 
+    jsonMetrics.put("Stamp", metrics->stamp.toNSec());
+
     jsonMetrics.put("PointExtractionTime",
                     metrics->point_extraction_time.toNSec());
     jsonMetrics.put("PointCloudStamp",
@@ -210,6 +212,8 @@ pt::ptree MetricsListener::ToPropertyTree(
     const LaserOdometryMetrics::ConstPtr& metrics)
 {
     pt::ptree jsonMetrics;
+
+    jsonMetrics.put("Stamp", metrics->stamp.toNSec());
 
     jsonMetrics.put("PointCloudStamp",
                     metrics->point_cloud_stamp.toNSec());
@@ -262,6 +266,8 @@ pt::ptree MetricsListener::ToPropertyTree(
     const LaserMappingMetrics::ConstPtr& metrics)
 {
     pt::ptree jsonMetrics;
+
+    jsonMetrics.put("Stamp", metrics->stamp.toNSec());
 
     jsonMetrics.put("PointCloudStamp",
                     metrics->point_cloud_stamp.toNSec());

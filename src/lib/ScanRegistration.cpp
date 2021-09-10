@@ -233,6 +233,9 @@ void ScanRegistration::publishResult()
     publishCloudMsg(this->_pubImuTrans,
                     this->imuTransform(), sweepStartTime, "/camera");
 
+    // Set the timestamp of the metrics message
+    this->_metricsMsg.stamp = ros::Time::now();
+
     // Publish the metrics message
     if (this->_metricsEnabled)
         this->_pubMetrics.publish(this->_metricsMsg);

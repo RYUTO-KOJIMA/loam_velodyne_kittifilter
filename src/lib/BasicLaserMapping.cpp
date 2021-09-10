@@ -1116,6 +1116,8 @@ void BasicLaserMapping::computePlaneDistances()
 // Clear the metrics message
 void BasicLaserMapping::clearMetricsMsg()
 {
+    this->_metricsMsg.stamp = ros::Time(0.0);
+
     this->_metricsMsg.point_cloud_stamp = ros::Time(0.0);
     this->_metricsMsg.num_of_full_res_points = 0;
     this->_metricsMsg.num_of_surround_points = 0;
