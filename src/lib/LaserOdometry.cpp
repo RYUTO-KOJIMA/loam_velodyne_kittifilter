@@ -39,6 +39,8 @@
 #include "loam_velodyne/Common.h"
 #include "loam_velodyne/MathUtils.h"
 
+using namespace loam_velodyne;
+
 namespace loam {
 
 LaserOdometry::LaserOdometry(float scanPeriod,
@@ -115,6 +117,9 @@ bool LaserOdometry::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
         }
     }
 
+    if (!privateNode.getParam("publishMetrics", this->_metricsEnabled))
+        this->_metricsEnabled = false;
+
     // Advertise laser odometry topics
     this->_pubLaserCloudCornerLast = node.advertise<sensor_msgs::PointCloud2>(
         "/laser_cloud_corner_last", 2);
@@ -144,6 +149,10 @@ bool LaserOdometry::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
     this->_subImuTrans = node.subscribe<sensor_msgs::PointCloud2>(
         "/imu_trans", 5,
         &LaserOdometry::imuTransHandler, this);
+
+    if (this->_metricsEnabled)
+        this->_pubMetrics = node.advertise<LaserOdometryMetrics>(
+            "/laser_odometry_metrics", 2);
 
     return true;
 }
@@ -275,6 +284,7 @@ void LaserOdometry::process()
         return;
 
     this->reset();
+    this->clearMetricsMsg();
     BasicLaserOdometry::process();
     this->publishResult();
 }
@@ -339,7 +349,20 @@ void LaserOdometry::publishResult()
         this->transformToEnd(this->laserCloud());
         publishCloudMsg(this->_pubLaserCloudFullRes,
                         *this->laserCloud(), sweepTime, "/camera");
+
+        // Collect the metrics
+        this->_metricsMsg.point_cloud_stamp = sweepTime;
+        this->_metricsMsg.num_of_full_res_points =
+            this->laserCloud()->size();
+        this->_metricsMsg.num_of_less_sharp_points =
+            this->lastCornerCloud()->size();
+        this->_metricsMsg.num_of_less_flat_points =
+            this->lastSurfaceCloud()->size();
     }
+
+    // Publish the metrics message
+    if (this->_metricsEnabled)
+        this->_pubMetrics.publish(this->_metricsMsg);
 }
 
 } // namespace loam

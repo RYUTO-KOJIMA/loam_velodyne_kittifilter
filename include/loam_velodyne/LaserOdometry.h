@@ -158,6 +158,8 @@ private:
     ros::Publisher _pubLaserOdometry;
     // Laser odometry transform broadcaster
     tf::TransformBroadcaster _tfBroadcaster;
+    // Metrics message publisher
+    ros::Publisher _pubMetrics;
 
     // Sharp corner cloud message subscriber
     ros::Subscriber _subCornerPointsSharp;

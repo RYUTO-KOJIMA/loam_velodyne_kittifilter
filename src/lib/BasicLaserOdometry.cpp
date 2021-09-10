@@ -180,6 +180,8 @@ void BasicLaserOdometry::updateIMU(
 
 void BasicLaserOdometry::process()
 {
+    const ros::Time startTime = ros::Time::now();
+
     if (!this->_systemInited) {
         // `_lastCornerCloud` includes both less sharp and sharp points
         // (`CORNER_LESS_SHARP` and `CORNER_SHARP`)
@@ -196,6 +198,10 @@ void BasicLaserOdometry::process()
 
         this->_systemInited = true;
 
+        // Update the metric
+        const ros::Time endTime = ros::Time::now();
+        this->_metricsMsg.process_time = endTime - startTime;
+
         return;
     }
 
@@ -206,6 +212,16 @@ void BasicLaserOdometry::process()
     // since `_imuVeloFromStart` is the multiply of the acceleration and
     // `_scanPeriod`
     this->_transform.pos -= this->_imuVeloFromStart * this->_scanPeriod;
+
+    // Collect the metrics
+    this->_metricsMsg.num_of_query_sharp_points =
+        this->_cornerPointsSharp->size();
+    this->_metricsMsg.num_of_reference_sharp_points =
+        this->_lastCornerCloud->size();
+    this->_metricsMsg.num_of_query_flat_points =
+        this->_surfPointsFlat->size();
+    this->_metricsMsg.num_of_reference_flat_points =
+        this->_lastSurfaceCloud->size();
 
     // Perform the Gauss-Newton optimization to update the pose transformation
     // if the previous point cloud is sufficiently large
@@ -263,6 +279,10 @@ void BasicLaserOdometry::process()
         this->_lastCornerKDTree.setInputCloud(this->_lastCornerCloud);
         this->_lastSurfaceKDTree.setInputCloud(this->_lastSurfaceCloud);
     }
+
+    // Update the metric
+    const ros::Time endTime = ros::Time::now();
+    this->_metricsMsg.process_time = endTime - startTime;
 }
 
 // Perform the Gauss-Newton optimization and update the pose transformation
@@ -275,6 +295,8 @@ void BasicLaserOdometry::performOptimization()
 
     // Perform iterations of the Gauss-Newton method
     for (std::size_t iter = 0; iter < this->_maxIterations; ++iter) {
+        const ros::Time iterationStartTime = ros::Time::now();
+
         this->_laserCloudOri->clear();
         this->_coeffSel->clear();
 
@@ -285,12 +307,21 @@ void BasicLaserOdometry::performOptimization()
         // correspondences
         this->computePlaneDistances(iter);
 
+        // Collect the metric
+        this->_metricsMsg.num_of_correspondences.push_back(
+            this->_laserCloudOri->size());
+
         // If the number of selected points is less than 10, move to the next
         // iteration and do not perform the following optimization
         const int pointSelNum = this->_laserCloudOri->points.size();
 
-        if (pointSelNum < 10)
+        if (pointSelNum < 10) {
+            // Collect the metric
+            const ros::Time iterationEndTime = ros::Time::now();
+            this->_metricsMsg.optimization_iteration_times.push_back(
+                iterationEndTime - iterationStartTime);
             continue;
+        }
 
         // `matA` is the Jacobian matrix in Equation (12)
         Eigen::Matrix<float, Eigen::Dynamic, 6> matA(pointSelNum, 6);
@@ -409,10 +440,23 @@ void BasicLaserOdometry::performOptimization()
             + std::pow(vecX(4, 0) * 100, 2)
             + std::pow(vecX(5, 0) * 100, 2));
 
+        // Collect the metric
+        const ros::Time iterationEndTime = ros::Time::now();
+        this->_metricsMsg.optimization_iteration_times.push_back(
+            iterationEndTime - iterationStartTime);
+
         // Terminate the Gauss-Newton method if the increment is small
         if (deltaR < this->_deltaRAbort && deltaT < this->_deltaTAbort)
             break;
     }
+
+    // Collect the metrics
+    this->_metricsMsg.optimization_time = std::accumulate(
+        this->_metricsMsg.optimization_iteration_times.begin(),
+        this->_metricsMsg.optimization_iteration_times.end(),
+        ros::Duration(0.0));
+    this->_metricsMsg.num_of_iterations =
+        this->_metricsMsg.optimization_iteration_times.size();
 }
 
 // Check the occurrence of the degeneration
@@ -458,8 +502,17 @@ bool BasicLaserOdometry::checkDegeneration(
 // correspondences
 void BasicLaserOdometry::computeCornerDistances(int iterCount)
 {
-    if (iterCount % 5 == 0)
+    if (iterCount % 5 == 0) {
         this->findCornerCorrespondence();
+    } else {
+        // Collect the metrics (for convenience)
+        this->_metricsMsg.corner_correspondence_times.push_back(
+            ros::Duration(0.0));
+        this->_metricsMsg.num_of_corner_correspondences.push_back(
+            this->_metricsMsg.num_of_corner_correspondences.back());
+    }
+
+    const ros::Time startTime = ros::Time::now();
 
     const std::size_t cornerPointsSharpNum =
         this->_cornerPointsSharp->points.size();
@@ -533,11 +586,20 @@ void BasicLaserOdometry::computeCornerDistances(int iterCount)
         this->_laserCloudOri->push_back(this->_cornerPointsSharp->points[i]);
         this->_coeffSel->push_back(coeff);
     }
+
+    // Collect the metric
+    const ros::Time endTime = ros::Time::now();
+    this->_metricsMsg.corner_coefficient_times.push_back(
+        endTime - startTime);
 }
 
 // Find point-to-edge correspondences from the corner point cloud
 void BasicLaserOdometry::findCornerCorrespondence()
 {
+    const ros::Time startTime = ros::Time::now();
+
+    std::size_t numOfValidCorrespondences = 0;
+
     const std::size_t cornerPointsSharpNum =
         this->_cornerPointsSharp->points.size();
     this->_pointSearchCornerInd1.resize(cornerPointsSharpNum);
@@ -638,15 +700,34 @@ void BasicLaserOdometry::findCornerCorrespondence()
         // (`closestPointInd` and `minPointInd2` in `_lastCornerCloud`)
         this->_pointSearchCornerInd1[i] = closestPointInd;
         this->_pointSearchCornerInd2[i] = minPointInd2;
+
+        if (minPointInd2 != -1)
+            ++numOfValidCorrespondences;
     }
+
+    // Collect the metrics
+    const ros::Time endTime = ros::Time::now();
+    this->_metricsMsg.corner_correspondence_times.push_back(
+        endTime - startTime);
+    this->_metricsMsg.num_of_corner_correspondences.push_back(
+        numOfValidCorrespondences);
 }
 
 // Compute the distances and coefficients from the point-to-plane
 // correspondences
 void BasicLaserOdometry::computePlaneDistances(int iterCount)
 {
-    if (iterCount % 5 == 0)
+    if (iterCount % 5 == 0) {
         this->findPlaneCorrespondence();
+    } else {
+        // Collect the metrics (for convenience)
+        this->_metricsMsg.plane_correspondence_times.push_back(
+            ros::Duration(0.0));
+        this->_metricsMsg.num_of_plane_correspondences.push_back(
+            this->_metricsMsg.num_of_plane_correspondences.back());
+    }
+
+    const ros::Time startTime = ros::Time::now();
 
     const std::size_t surfPointsFlatNum =
         this->_surfPointsFlat->points.size();
@@ -730,11 +811,20 @@ void BasicLaserOdometry::computePlaneDistances(int iterCount)
         this->_laserCloudOri->push_back(this->_surfPointsFlat->points[i]);
         this->_coeffSel->push_back(coeff);
     }
+
+    // Collect the metric
+    const ros::Time endTime = ros::Time::now();
+    this->_metricsMsg.plane_coefficient_times.push_back(
+        endTime - startTime);
 }
 
 // Find point-to-plane correspondences from the planar point cloud
 void BasicLaserOdometry::findPlaneCorrespondence()
 {
+    const ros::Time startTime = ros::Time::now();
+
+    std::size_t numOfValidCorrespondences = 0;
+
     const std::size_t surfPointsFlatNum =
         this->_surfPointsFlat->points.size();
     this->_pointSearchSurfInd1.resize(surfPointsFlatNum);
@@ -843,7 +933,45 @@ void BasicLaserOdometry::findPlaneCorrespondence()
         this->_pointSearchSurfInd1[i] = closestPointInd;
         this->_pointSearchSurfInd2[i] = minPointInd2;
         this->_pointSearchSurfInd3[i] = minPointInd3;
+
+        if (minPointInd2 != -1 && minPointInd3 != -1)
+            ++numOfValidCorrespondences;
     }
+
+    // Collect the metrics
+    const ros::Time endTime = ros::Time::now();
+    this->_metricsMsg.plane_correspondence_times.push_back(
+        endTime - startTime);
+    this->_metricsMsg.num_of_plane_correspondences.push_back(
+        numOfValidCorrespondences);
+}
+
+// Clear the metrics message
+void BasicLaserOdometry::clearMetricsMsg()
+{
+    this->_metricsMsg.point_cloud_stamp = ros::Time(0.0);
+    this->_metricsMsg.num_of_full_res_points = 0;
+    this->_metricsMsg.num_of_less_sharp_points = 0;
+    this->_metricsMsg.num_of_less_flat_points = 0;
+
+    this->_metricsMsg.process_time = ros::Duration(0.0);
+    this->_metricsMsg.num_of_query_sharp_points = 0;
+    this->_metricsMsg.num_of_reference_sharp_points = 0;
+    this->_metricsMsg.num_of_query_flat_points = 0;
+    this->_metricsMsg.num_of_reference_flat_points = 0;
+
+    this->_metricsMsg.optimization_time = ros::Duration(0.0);
+    this->_metricsMsg.num_of_iterations = 0;
+    this->_metricsMsg.optimization_iteration_times.clear();
+    this->_metricsMsg.num_of_correspondences.clear();
+
+    this->_metricsMsg.corner_coefficient_times.clear();
+    this->_metricsMsg.corner_correspondence_times.clear();
+    this->_metricsMsg.num_of_corner_correspondences.clear();
+
+    this->_metricsMsg.plane_coefficient_times.clear();
+    this->_metricsMsg.plane_correspondence_times.clear();
+    this->_metricsMsg.num_of_plane_correspondences.clear();
 }
 
 } // namespace loam

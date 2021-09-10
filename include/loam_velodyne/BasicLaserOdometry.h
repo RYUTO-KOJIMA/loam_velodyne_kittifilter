@@ -6,6 +6,8 @@
 #include "loam_velodyne/Twist.h"
 #include "loam_velodyne/nanoflann_pcl.h"
 
+#include "loam_velodyne/LaserOdometryMetrics.h"
+
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
@@ -92,6 +94,16 @@ private:
     void computePlaneDistances(int iterCount);
     // Find point-to-plane correspondences from the planar point cloud
     void findPlaneCorrespondence();
+
+protected:
+    // Clear the metrics message
+    void clearMetricsMsg();
+
+protected:
+    // Flag to enable the metrics
+    bool _metricsEnabled;
+    // Metrics message
+    loam_velodyne::LaserOdometryMetrics _metricsMsg;
 
 private:
     // Time per scan
