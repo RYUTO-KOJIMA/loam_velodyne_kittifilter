@@ -373,17 +373,6 @@ void BasicScanRegistration::setRegionBuffersFor(
               [&](const std::size_t lhs, const std::size_t rhs) {
                   return this->_regionCurvature[lhs - startIdx]
                          > this->_regionCurvature[rhs - startIdx]; });
-
-    /* for (size_t i = 1; i < regionSize; ++i) {
-        for (size_t j = i; j >= 1; --j) {
-            const std::size_t idx0 = this->_regionSortIndices[j] - startIdx;
-            const std::size_t idx1 = this->_regionSortIndices[j - 1] - startIdx;
-            if (this->_regionCurvature[idx0] < this->_regionCurvature[idx1]) {
-                std::swap(this->_regionSortIndices[j],
-                          this->_regionSortIndices[j - 1]);
-            }
-        }
-    } */
 }
 
 void BasicScanRegistration::setScanBuffersFor(
