@@ -103,6 +103,8 @@ protected:
     // Flag enabled if the input point clouds are undistorted
     // Point clouds in Kitti odometry dataset are undistorted
     bool _pointUndistorted;
+    // Flag to publish the full-resolution point clouds
+    bool _fullPointCloudPublished;
 
     // Flag to enable the metrics
     bool _metricsEnabled;

@@ -144,16 +144,22 @@ bool LaserMapping::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
         }
     }
 
+    if (!privateNode.getParam("publishFullPointCloud",
+                              this->_fullPointCloudPublished))
+        this->_fullPointCloudPublished = true;
+
     if (!privateNode.getParam("publishMetrics", this->_metricsEnabled))
         this->_metricsEnabled = false;
 
     // Advertise laser mapping topics
     this->_pubLaserCloudSurround = node.advertise<sensor_msgs::PointCloud2>(
         "/laser_cloud_surround", 1);
-    this->_pubLaserCloudFullRes = node.advertise<sensor_msgs::PointCloud2>(
-        "/velodyne_cloud_registered", 2);
     this->_pubOdomAftMapped = node.advertise<nav_msgs::Odometry>(
         "/aft_mapped_to_init", 5);
+
+    if (this->_fullPointCloudPublished)
+        this->_pubLaserCloudFullRes = node.advertise<sensor_msgs::PointCloud2>(
+            "/velodyne_cloud_registered", 2);
 
     // Subscribe to laser odometry topics
     this->_subLaserCloudCornerLast = node.subscribe<sensor_msgs::PointCloud2>(
@@ -165,9 +171,11 @@ bool LaserMapping::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
     this->_subLaserOdometry = node.subscribe<nav_msgs::Odometry>(
         "/laser_odom_to_init", 5,
         &LaserMapping::laserOdometryHandler, this);
-    this->_subLaserCloudFullRes = node.subscribe<sensor_msgs::PointCloud2>(
-        "/velodyne_cloud_3", 2,
-        &LaserMapping::laserCloudFullResHandler, this);
+
+    if (this->_fullPointCloudPublished)
+        this->_subLaserCloudFullRes = node.subscribe<sensor_msgs::PointCloud2>(
+            "/velodyne_cloud_3", 2,
+            &LaserMapping::laserCloudFullResHandler, this);
 
     // Subscribe to IMU topic
     this->_subImu = node.subscribe<sensor_msgs::Imu>(
@@ -288,13 +296,17 @@ bool LaserMapping::hasNewData()
     const auto diffFullResPoints =
         this->_timeLaserCloudFullRes - this->_timeLaserOdometry;
 
+    const auto isFullResNew =
+        !this->_fullPointCloudPublished ||
+        (this->_newLaserCloudFullRes &&
+         std::fabs(diffFullResPoints.toSec()) < 0.005);
+
     return this->_newLaserCloudCornerLast &&
            this->_newLaserCloudSurfLast &&
-           this->_newLaserCloudFullRes &&
            this->_newLaserOdometry &&
            std::fabs(diffCornerPoints.toSec()) < 0.005 &&
            std::fabs(diffSurfPoints.toSec()) < 0.005 &&
-           std::fabs(diffFullResPoints.toSec()) < 0.005;
+           isFullResNew;
 }
 
 void LaserMapping::process()
@@ -329,12 +341,15 @@ void LaserMapping::publishResult()
     }
 
     // Publish transformed full resolution input cloud
-    publishCloudMsg(this->_pubLaserCloudFullRes, this->laserCloud(),
-                    this->_timeLaserOdometry, "camera_init");
+    if (this->_fullPointCloudPublished) {
+        publishCloudMsg(this->_pubLaserCloudFullRes, this->laserCloud(),
+                        this->_timeLaserOdometry, "camera_init");
+        // Collect the metric
+        this->_metricsMsg.num_of_full_res_points = this->laserCloud().size();
+    }
 
-    // Collect the metrics
+    // Collect the metric
     this->_metricsMsg.point_cloud_stamp = this->_timeLaserOdometry;
-    this->_metricsMsg.num_of_full_res_points = this->laserCloud().size();
 
     // Swap and reverse the sign of Euler angles as in LaserOdometry
     // Publish odometry after mapped transformations

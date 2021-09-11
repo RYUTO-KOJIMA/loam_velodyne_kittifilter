@@ -143,6 +143,9 @@ bool ScanRegistration::parseParams(
         }
     }
 
+    if (!nh.getParam("publishFullPointCloud", this->_fullPointCloudPublished))
+        this->_fullPointCloudPublished = true;
+
     if (!nh.getParam("publishMetrics", this->_metricsEnabled))
         this->_metricsEnabled = false;
 
@@ -161,8 +164,10 @@ bool ScanRegistration::setupROS(
         "/imu/data", 50, &ScanRegistration::handleIMUMessage, this);
 
     // Advertise scan registration topics
-    this->_pubLaserCloud = node.advertise<sensor_msgs::PointCloud2>(
-        "/velodyne_cloud_2", 2);
+    if (this->_fullPointCloudPublished)
+        this->_pubLaserCloud = node.advertise<sensor_msgs::PointCloud2>(
+            "/velodyne_cloud_2", 2);
+
     this->_pubCornerPointsSharp = node.advertise<sensor_msgs::PointCloud2>(
         "/laser_cloud_sharp", 2);
     this->_pubCornerPointsLessSharp = node.advertise<sensor_msgs::PointCloud2>(
@@ -217,9 +222,12 @@ void ScanRegistration::publishResult()
 {
     const auto sweepStartTime = toROSTime(this->sweepStart());
 
-    // Publish full resolution and feature point clouds
-    publishCloudMsg(this->_pubLaserCloud,
-                    this->laserCloud(), sweepStartTime, "/camera");
+    // Publish full-resolution point cloud
+    if (this->_fullPointCloudPublished)
+        publishCloudMsg(this->_pubLaserCloud,
+                        this->laserCloud(), sweepStartTime, "/camera");
+
+    // Publish feature point clouds
     publishCloudMsg(this->_pubCornerPointsSharp,
                     this->cornerPointsSharp(), sweepStartTime, "/camera");
     publishCloudMsg(this->_pubCornerPointsLessSharp,

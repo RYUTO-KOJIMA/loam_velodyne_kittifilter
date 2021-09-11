@@ -60,6 +60,8 @@ const std::vector<Eigen::Vector3i> kSurroundIndices = computeSurroundIndices();
 
 BasicLaserMapping::BasicLaserMapping(const float scanPeriod,
                                      const std::size_t maxIterations) :
+    _fullPointCloudPublished(false),
+    _metricsEnabled(false),
     _scanPeriod(scanPeriod),
     _stackFrameNum(1),
     _mapFrameNum(5),
@@ -540,7 +542,9 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
         *this->_laserCloudSurfArray[ind] = std::move(downsampledSurfCloud);
     }
 
-    this->transformFullResToMap();
+    if (this->_fullPointCloudPublished)
+        this->transformFullResToMap();
+
     this->_downsizedMapCreated = this->createDownsizedMap();
 
     // Update the metric

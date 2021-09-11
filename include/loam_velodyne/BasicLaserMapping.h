@@ -174,6 +174,9 @@ protected:
     void clearMetricsMsg();
 
 protected:
+    // Flag to publish the full-resolution point clouds
+    bool _fullPointCloudPublished;
+
     // Flag to enable the metrics
     bool _metricsEnabled;
     // Metrics message

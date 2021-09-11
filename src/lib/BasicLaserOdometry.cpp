@@ -14,11 +14,13 @@ namespace loam {
 
 BasicLaserOdometry::BasicLaserOdometry(
     float scanPeriod, std::size_t maxIterations) :
+    _pointUndistorted(false),
+    _fullPointCloudPublished(false),
+    _metricsEnabled(false),
     _scanPeriod(scanPeriod),
-    _systemInited(false),
     _frameCount(0),
     _maxIterations(maxIterations),
-    _pointUndistorted(false),
+    _systemInited(false),
     _deltaTAbort(0.1),
     _deltaRAbort(0.1),
     _cornerPointsSharp(new pcl::PointCloud<pcl::PointXYZI>()),

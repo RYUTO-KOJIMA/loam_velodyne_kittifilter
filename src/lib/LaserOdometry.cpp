@@ -134,6 +134,10 @@ bool LaserOdometry::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
     if (!privateNode.getParam("pointUndistorted", this->_pointUndistorted))
         this->_pointUndistorted = false;
 
+    if (!privateNode.getParam("publishFullPointCloud",
+                              this->_fullPointCloudPublished))
+        this->_fullPointCloudPublished = true;
+
     if (!privateNode.getParam("publishMetrics", this->_metricsEnabled))
         this->_metricsEnabled = false;
 
@@ -142,10 +146,12 @@ bool LaserOdometry::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
         "/laser_cloud_corner_last", 2);
     this->_pubLaserCloudSurfLast = node.advertise<sensor_msgs::PointCloud2>(
         "/laser_cloud_surf_last", 2);
-    this->_pubLaserCloudFullRes = node.advertise<sensor_msgs::PointCloud2>(
-        "/velodyne_cloud_3", 2);
     this->_pubLaserOdometry = node.advertise<nav_msgs::Odometry>(
         "/laser_odom_to_init", 5);
+
+    if (this->_fullPointCloudPublished)
+        this->_pubLaserCloudFullRes = node.advertise<sensor_msgs::PointCloud2>(
+            "/velodyne_cloud_3", 2);
 
     // Subscribe scan registration topics
     this->_subCornerPointsSharp = node.subscribe<sensor_msgs::PointCloud2>(
@@ -160,12 +166,14 @@ bool LaserOdometry::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
     this->_subSurfPointsLessFlat = node.subscribe<sensor_msgs::PointCloud2>(
         "/laser_cloud_less_flat", 2,
         &LaserOdometry::laserCloudLessFlatHandler, this);
-    this->_subLaserCloudFullRes = node.subscribe<sensor_msgs::PointCloud2>(
-        "/velodyne_cloud_2", 2,
-        &LaserOdometry::laserCloudFullResHandler, this);
     this->_subImuTrans = node.subscribe<sensor_msgs::PointCloud2>(
         "/imu_trans", 5,
         &LaserOdometry::imuTransHandler, this);
+
+    if (this->_fullPointCloudPublished)
+        this->_subLaserCloudFullRes = node.subscribe<sensor_msgs::PointCloud2>(
+            "/velodyne_cloud_2", 2,
+            &LaserOdometry::laserCloudFullResHandler, this);
 
     if (this->_metricsEnabled)
         this->_pubMetrics = node.advertise<LaserOdometryMetrics>(
@@ -295,17 +303,21 @@ bool LaserOdometry::hasNewData()
     const auto diffImuTrans =
         this->_timeImuTrans - this->_timeSurfPointsLessFlat;
 
+    const auto isFullResNew =
+        !this->_fullPointCloudPublished ||
+        (this->_newLaserCloudFullRes &&
+         std::fabs(diffFullResPoints.toSec()) < 0.005);
+
     return this->_newCornerPointsSharp &&
            this->_newCornerPointsLessSharp &&
            this->_newSurfPointsFlat &&
            this->_newSurfPointsLessFlat &&
-           this->_newLaserCloudFullRes &&
            this->_newImuTrans &&
            std::fabs(diffSharpPoints.toSec()) < 0.005 &&
            std::fabs(diffLessSharpPoints.toSec()) < 0.005 &&
            std::fabs(diffFlatPoints.toSec()) < 0.005 &&
-           std::fabs(diffFullResPoints.toSec()) < 0.005 &&
-           std::fabs(diffImuTrans.toSec()) < 0.005;
+           std::fabs(diffImuTrans.toSec()) < 0.005 &&
+           isFullResNew;
 }
 
 void LaserOdometry::process()
@@ -376,14 +388,17 @@ void LaserOdometry::publishResult()
 
         // `laserCloud()` is reprojected to the beginning of the current sweep,
         // and should be reprojected to the end of the current sweep
-        this->transformToEnd(this->laserCloud());
-        publishCloudMsg(this->_pubLaserCloudFullRes,
-                        *this->laserCloud(), sweepTime, "/camera");
+        if (this->_fullPointCloudPublished) {
+            this->transformToEnd(this->laserCloud());
+            publishCloudMsg(this->_pubLaserCloudFullRes,
+                            *this->laserCloud(), sweepTime, "/camera");
+            // Collect the metric
+            this->_metricsMsg.num_of_full_res_points =
+                this->laserCloud()->size();
+        }
 
         // Collect the metrics
         this->_metricsMsg.point_cloud_stamp = sweepTime;
-        this->_metricsMsg.num_of_full_res_points =
-            this->laserCloud()->size();
         this->_metricsMsg.num_of_less_sharp_points =
             this->lastCornerCloud()->size();
         this->_metricsMsg.num_of_less_flat_points =
