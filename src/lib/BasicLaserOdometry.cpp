@@ -14,6 +14,15 @@ namespace loam {
 
 BasicLaserOdometry::BasicLaserOdometry(
     float scanPeriod, std::size_t maxIterations) :
+    _residualScale(0.05f),
+    _eigenThresholdTrans(10.0f),
+    _eigenThresholdRot(10.0f),
+    _weightDecayCorner(1.8f),
+    _weightThresholdCorner(0.1f),
+    _sqDistThresholdCorner(25.0f),
+    _weightDecaySurface(1.8f),
+    _weightThresholdSurface(0.1f),
+    _sqDistThresholdSurface(25.0f),
     _pointUndistorted(false),
     _fullPointCloudPublished(false),
     _metricsEnabled(false),
@@ -236,6 +245,13 @@ void BasicLaserOdometry::process()
     if (this->_lastCornerCloud->points.size() > 10 &&
         this->_lastSurfaceCloud->points.size() > 100)
         this->performOptimization();
+    else
+        ROS_WARN("Pose is not optimized in LaserOdometry node "
+                 "since the point cloud is too small: "
+                 "_lastCornerCloud->size(): %zu, "
+                 "_lastSurfaceCloud->size(): %zu",
+                 this->_lastCornerCloud->size(),
+                 this->_lastSurfaceCloud->size());
 
     // `_transformSum` is the transformation from the world coordinate frame
     // to the previous odometry frame
@@ -389,7 +405,7 @@ void BasicLaserOdometry::performOptimization()
             // Point-to-edge or point-to-plane distance is stored in the
             // intensity field in the coefficient
             // Reverse the sign of the residual to follow Gauss-Newton method
-            vecB(i, 0) = -0.05 * coeff.intensity;
+            vecB(i, 0) = -this->_residualScale * coeff.intensity;
         }
 
         matAt = matA.transpose();
@@ -486,11 +502,14 @@ bool BasicLaserOdometry::checkDegeneration(
     Eigen::Matrix<float, 6, 6> matV2 = matV;
 
     bool isDegenerate = false;
-    const float eigenThreshold[6] = { 10, 10, 10, 10, 10, 10 };
+    const float eigenThreshold[6] = {
+        this->_eigenThresholdRot, this->_eigenThresholdRot,
+        this->_eigenThresholdRot, this->_eigenThresholdTrans,
+        this->_eigenThresholdTrans, this->_eigenThresholdTrans };
 
     // Eigenvalues are sorted in the increasing order
     // Detect the occurrence of the degeneration if one of the eigenvalues is
-    // less than 10
+    // less than `_eigenThresholdTrans` or `_eigenThresholdRot`
     for (int i = 0; i < 6; ++i) {
         if (matE(0, i) < eigenThreshold[i]) {
             matV2.row(i).setZero();
@@ -578,9 +597,10 @@ void BasicLaserOdometry::computeCornerDistances(int iterCount)
         // Assign smaller weights for the points with larger
         // point-to-edge distances and zero weights for outliers
         // with distances larger than the threshold (Section V.D)
-        const float s = iterCount < 5 ? 1.0f : (1.0f - 1.8f * std::fabs(ld2));
+        const float s = iterCount < 5 ? 1.0f :
+                        (1.0f - this->_weightDecayCorner * std::fabs(ld2));
 
-        if (s <= 0.1f || ld2 == 0.0f)
+        if (s <= this->_weightThresholdCorner || ld2 == 0.0f)
             continue;
 
         // Store the coefficient vector and the original point `i`
@@ -639,7 +659,7 @@ void BasicLaserOdometry::findCornerCorrespondence()
         // (point `i` in the paper) and its closest point in the last
         // scan (point `j` in the paper) is larger than 5 meters, then the
         // correspondence for the current corner point `i` is not found
-        if (pointSearchSqDis[0] >= 25.0f) {
+        if (pointSearchSqDis[0] >= this->_sqDistThresholdCorner) {
             this->_pointSearchCornerInd1[i] = -1;
             this->_pointSearchCornerInd2[i] = -1;
             continue;
@@ -658,7 +678,7 @@ void BasicLaserOdometry::findCornerCorrespondence()
         // in the two consecutive scans to the scan of point `j`
         // which is the point `l` in the paper
         int minPointInd2 = -1;
-        float minPointSqDis2 = 25.0f;
+        float minPointSqDis2 = this->_sqDistThresholdCorner;
 
         // The below should be `j < lastCornerCloudSize` instead of
         // `j < cornerPointsSharpNum`
@@ -804,10 +824,10 @@ void BasicLaserOdometry::computePlaneDistances(int iterCount)
         // point-to-plane distances and zero weights for outliers
         // with distances larger than the threshold (Section V.D)
         const float s = iterCount < 5 ? 1.0f :
-            (1.0f - 1.8f * std::fabs(pd2)
+            (1.0f - this->_weightDecaySurface * std::fabs(pd2)
             / std::sqrt(calcPointDistance(pointSel)));
 
-        if (s <= 0.1f || pd2 == 0.0f)
+        if (s <= this->_weightThresholdSurface || pd2 == 0.0f)
             continue;
 
         // Store the coefficient vector and the original point `i`
@@ -865,7 +885,7 @@ void BasicLaserOdometry::findPlaneCorrespondence()
         // (point `i` in the paper) and its closest point in the last
         // scan (point `j` in the paper) is larger than 5 meters, then the
         // correspondence for the current planar point `i` is not found
-        if (pointSearchSqDis[0] >= 25.0f) {
+        if (pointSearchSqDis[0] >= this->_sqDistThresholdSurface) {
             this->_pointSearchSurfInd1[i] = -1;
             this->_pointSearchSurfInd2[i] = -1;
             this->_pointSearchSurfInd3[i] = -1;
@@ -885,8 +905,8 @@ void BasicLaserOdometry::findPlaneCorrespondence()
         // scans to the scan of point `j`
         int minPointInd2 = -1;
         int minPointInd3 = -1;
-        float minPointSqDis2 = 25.0f;
-        float minPointSqDis3 = 25.0f;
+        float minPointSqDis2 = this->_sqDistThresholdSurface;
+        float minPointSqDis3 = this->_sqDistThresholdSurface;
 
         // The below should be `j < _lastSurfaceCloud` instead of
         // `j < surfPointsFlatNum`
