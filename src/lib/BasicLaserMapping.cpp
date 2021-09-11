@@ -400,9 +400,8 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
             // `100.0f + squaredSide1 - squaredSide2` equals to
             // `2 * 10 * sqrt(squaredSide1) * cos(x)` using law of
             // cosines, where `x` is `90 - (vertical angle)`
-            const float check1 = pointOnYAxis.y * pointOnYAxis.y
-                                 + squaredSide1 - squaredSide2;
-            const float check2 = pointOnYAxis.y * std::sqrt(3.0f)
+            const float check1 = 100.0f + squaredSide1 - squaredSide2;
+            const float check2 = 10.0f * std::sqrt(3.0f)
                                  * std::sqrt(squaredSide1);
 
             // This holds if |100.0f + side1 - side2| is less than
