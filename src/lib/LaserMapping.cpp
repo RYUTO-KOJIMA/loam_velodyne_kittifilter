@@ -63,92 +63,222 @@ LaserMapping::LaserMapping(const float scanPeriod,
 
 bool LaserMapping::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
 {
-    // Fetch laser mapping params
+    // Fetch the node parameters
+    auto getInt = [&privateNode](const char* key, int& value) {
+        return privateNode.getParam(key, value); };
+    auto getBool = [&privateNode](const char* key, bool& value) {
+        return privateNode.getParam(key, value); };
+    auto getFloat = [&privateNode](const char* key, float& value) {
+        return privateNode.getParam(key, value); };
+
     float fParam;
     int iParam;
+    bool boolValue;
 
-    if (privateNode.getParam("scanPeriod", fParam)) {
+    if (getFloat("scanPeriod", fParam)) {
         if (fParam <= 0.0f) {
             ROS_ERROR("Invalid scanPeriod parameter: %f "
-                      "(expected > 0)", fParam);
+                      "(expected > 0, default: 0.1)", fParam);
             return false;
         } else {
             this->setScanPeriod(fParam);
-            ROS_INFO("Set scanPeriod: %g", fParam);
         }
     }
 
-    if (privateNode.getParam("maxIterations", iParam)) {
+    if (getInt("maxIterations", iParam)) {
         if (iParam < 1) {
             ROS_ERROR("Invalid maxIterations parameter: %d "
-                      "(expected > 0)", iParam);
+                      "(expected > 0, default: 10)", iParam);
             return false;
         } else {
             this->setMaxIterations(iParam);
-            ROS_INFO("Set maxIterations: %d", iParam);
         }
     }
 
-    if (privateNode.getParam("deltaTAbort", fParam)) {
+    if (getFloat("deltaTAbort", fParam)) {
         if (fParam <= 0.0f) {
             ROS_ERROR("Invalid deltaTAbort parameter: %f "
-                      "(expected > 0)", fParam);
+                      "(expected > 0, default: 0.05)", fParam);
             return false;
         } else {
-            setDeltaTAbort(fParam);
-            ROS_INFO("Set deltaTAbort: %g", fParam);
+            this->setDeltaTAbort(fParam);
         }
     }
 
-    if (privateNode.getParam("deltaRAbort", fParam)) {
+    if (getFloat("deltaRAbort", fParam)) {
         if (fParam <= 0.0f) {
             ROS_ERROR("Invalid deltaRAbort parameter: %f "
-                      "(expected > 0)", fParam);
+                      "(expected > 0, default: 0.05)", fParam);
             return false;
         } else {
             this->setDeltaRAbort(fParam);
-            ROS_INFO("Set deltaRAbort: %g", fParam);
         }
     }
 
-    if (privateNode.getParam("cornerFilterSize", fParam)) {
+    if (getFloat("cornerFilterSize", fParam)) {
         if (fParam < 0.001f) {
             ROS_ERROR("Invalid cornerFilterSize parameter: %f "
-                      "(expected >= 0.001)", fParam);
+                      "(expected >= 0.001, default: 0.2)", fParam);
             return false;
         } else {
             this->downSizeFilterCorner().setLeafSize(fParam, fParam, fParam);
-            ROS_INFO("Set corner down size filter leaf size: %g", fParam);
         }
     }
 
-    if (privateNode.getParam("surfaceFilterSize", fParam)) {
+    if (getFloat("surfaceFilterSize", fParam)) {
         if (fParam < 0.001f) {
             ROS_ERROR("Invalid surfaceFilterSize parameter: %f "
-                      "(expected >= 0.001)", fParam);
+                      "(expected >= 0.001, default: 0.4)", fParam);
             return false;
         } else {
             this->downSizeFilterSurf().setLeafSize(fParam, fParam, fParam);
-            ROS_INFO("Set surface down size filter leaf size: %g", fParam);
         }
     }
 
-    if (privateNode.getParam("mapFilterSize", fParam)) {
+    if (getFloat("mapFilterSize", fParam)) {
         if (fParam < 0.001f) {
             ROS_ERROR("Invalid mapFilterSize parameter: %f "
-                      "(expected >= 0.001)", fParam);
+                      "(expected >= 0.001: default: 0.0)", fParam);
             return false;
         } else {
             this->downSizeFilterMap().setLeafSize(fParam, fParam, fParam);
-            ROS_INFO("Set map down size filter leaf size: %g", fParam);
         }
     }
 
-    if (!privateNode.getParam("publishFullPointCloud",
-                              this->_fullPointCloudPublished))
+    ROS_INFO("BasicLaserMapping::_scanPeriod: %g", this->scanPeriod());
+    ROS_INFO("BasicLaserMapping::_maxIterations: %zu", this->maxIterations());
+    ROS_INFO("BasicLaserMapping::_deltaTAbort: %g", this->deltaTAbort());
+    ROS_INFO("BasicLaserMapping::_deltaRAbort: %g", this->deltaRAbort());
+    ROS_INFO("BasicLaserMapping::_downSizeFilterCorner: (%g, %g, %g)",
+             this->downSizeFilterCorner().getLeafSize().x(),
+             this->downSizeFilterCorner().getLeafSize().y(),
+             this->downSizeFilterCorner().getLeafSize().z());
+    ROS_INFO("BasicLaserMapping::_downSizeFilterSurf: (%g, %g, %g)",
+             this->downSizeFilterSurf().getLeafSize().x(),
+             this->downSizeFilterSurf().getLeafSize().y(),
+             this->downSizeFilterSurf().getLeafSize().z());
+    ROS_INFO("BasicLaserMapping::_downSizeFilterMap: (%g, %g, %g)",
+             this->downSizeFilterMap().getLeafSize().x(),
+             this->downSizeFilterMap().getLeafSize().y(),
+             this->downSizeFilterMap().getLeafSize().z());
+
+    if (getFloat("residualScale", fParam)) {
+        if (fParam <= 0.0f) {
+            ROS_ERROR("Invalid residualScale parameter: %f "
+                      "(expected > 0, default: 1.0)", fParam);
+            return false;
+        } else {
+            this->_residualScale = fParam;
+        }
+    }
+
+    if (getFloat("eigenThresholdTrans", fParam)) {
+        if (fParam <= 0.0f) {
+            ROS_ERROR("Invalid eigenThresholdTrans parameter: %f "
+                      "(expected > 0, default: 100.0)", fParam);
+            return false;
+        } else {
+            this->_eigenThresholdTrans = fParam;
+        }
+    }
+
+    if (getFloat("eigenThresholdRot", fParam)) {
+        if (fParam <= 0.0f) {
+            ROS_ERROR("Invalid eigenThresholdRot parameter: %f "
+                      "(expected > 0, default: 100.0)", fParam);
+            return false;
+        } else {
+            this->_eigenThresholdRot = fParam;
+        }
+    }
+
+    if (getFloat("sqDistThresholdCorner", fParam)) {
+        if (fParam < 0.0f) {
+            ROS_ERROR("Invalid sqDistThresholdCorner parameter: %f "
+                      "(expected >= 0, default: 1.0)", fParam);
+            return false;
+        } else {
+            this->_sqDistThresholdCorner = fParam;
+        }
+    }
+
+    if (getFloat("weightDecayCorner", fParam)) {
+        if (fParam < 0.0f) {
+            ROS_ERROR("Invalid weightDecayCorner parameter: %f "
+                      "(expected >= 0, default: 0.9)", fParam);
+            return false;
+        } else {
+            this->_weightDecayCorner = fParam;
+        }
+    }
+
+    if (getFloat("weightThresholdCorner", fParam)) {
+        if (fParam < 0.0f) {
+            ROS_ERROR("Invalid weightThresholdCorner parameter: %f "
+                      "(expected >= 0, default: 0.1)", fParam);
+            return false;
+        } else {
+            this->_weightThresholdCorner = fParam;
+        }
+    }
+
+    if (getFloat("sqDistThresholdSurface", fParam)) {
+        if (fParam < 0.0f) {
+            ROS_ERROR("Invalid sqDistThresholdSurface parameter: %f "
+                      "(expected >= 0, default: 1.0)", fParam);
+            return false;
+        } else {
+            this->_sqDistThresholdSurface = fParam;
+        }
+    }
+
+    if (getFloat("weightDecaySurface", fParam)) {
+        if (fParam < 0.0f) {
+            ROS_ERROR("Invalid weightDecaySurface parameter: %f "
+                      "(expected >= 0, default: 0.9)", fParam);
+            return false;
+        } else {
+            this->_weightDecaySurface = fParam;
+        }
+    }
+
+    if (getFloat("weightThresholdSurface", fParam)) {
+        if (fParam < 0.0f) {
+            ROS_ERROR("Invalid weightThresholdSurface parameter: %f "
+                      "(expected >= 0, default: 0.1)", fParam);
+            return false;
+        } else {
+            this->_weightThresholdSurface = fParam;
+        }
+    }
+
+    ROS_INFO("BasicLaserMapping::_residualScale: %g",
+             this->_residualScale);
+    ROS_INFO("BasicLaserMapping::_eigenThresholdTrans: %g",
+             this->_eigenThresholdTrans);
+    ROS_INFO("BasicLaserMapping::_eigenThresholdRot: %g",
+             this->_eigenThresholdRot);
+    ROS_INFO("BasicLaserMapping::_sqDistThresholdCorner: %g",
+             this->_sqDistThresholdCorner);
+    ROS_INFO("BasicLaserMapping::_weightDecayCorner: %g",
+             this->_weightDecayCorner);
+    ROS_INFO("BasicLaserMapping::_weightThresholdCorner: %g",
+             this->_weightThresholdCorner);
+    ROS_INFO("BasicLaserMapping::_sqDistThresholdSurface: %g",
+             this->_sqDistThresholdSurface);
+    ROS_INFO("BasicLaserMapping::_weightDecaySurface: %g",
+             this->_weightDecaySurface);
+    ROS_INFO("BasicLaserMapping::_weightThresholdSurface: %g",
+             this->_weightThresholdSurface);
+
+    if (getBool("publishFullPointCloud", boolValue))
+        this->_fullPointCloudPublished = boolValue;
+    else
         this->_fullPointCloudPublished = true;
 
-    if (!privateNode.getParam("publishMetrics", this->_metricsEnabled))
+    if (getBool("publishMetrics", boolValue))
+        this->_metricsEnabled = boolValue;
+    else
         this->_metricsEnabled = false;
 
     // Advertise laser mapping topics

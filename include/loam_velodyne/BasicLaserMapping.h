@@ -174,9 +174,27 @@ protected:
     void clearMetricsMsg();
 
 protected:
+    // Scale for the residuals
+    float _residualScale;
+    // Eigenvalue threshold for degeneration (translation)
+    float _eigenThresholdTrans;
+    // Eigenvalue threshold for degeneration (rotation)
+    float _eigenThresholdRot;
+    // Squared distance threshold for point-to-edge correspondences
+    float _sqDistThresholdCorner;
+    // Decay factor for the bisquare weights for point-to-edge correspondences
+    float _weightDecayCorner;
+    // Bisquare weight threshold for point-to-edge correspondences
+    float _weightThresholdCorner;
+    // Squared distance threshold for point-to-plane correspondences
+    float _sqDistThresholdSurface;
+    // Decay factor for the bisquare weights for point-to-plane correspondences
+    float _weightDecaySurface;
+    // Bisquare weight threshold for point-to-plane correspondences
+    float _weightThresholdSurface;
+
     // Flag to publish the full-resolution point clouds
     bool _fullPointCloudPublished;
-
     // Flag to enable the metrics
     bool _metricsEnabled;
     // Metrics message

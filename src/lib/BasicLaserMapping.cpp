@@ -60,6 +60,15 @@ const std::vector<Eigen::Vector3i> kSurroundIndices = computeSurroundIndices();
 
 BasicLaserMapping::BasicLaserMapping(const float scanPeriod,
                                      const std::size_t maxIterations) :
+    _residualScale(1.0f),
+    _eigenThresholdTrans(100.0f),
+    _eigenThresholdRot(100.0f),
+    _sqDistThresholdCorner(1.0f),
+    _weightDecayCorner(0.9f),
+    _weightThresholdCorner(0.1f),
+    _sqDistThresholdSurface(1.0f),
+    _weightDecaySurface(0.9f),
+    _weightThresholdSurface(0.1f),
     _fullPointCloudPublished(false),
     _metricsEnabled(false),
     _scanPeriod(scanPeriod),
@@ -278,7 +287,7 @@ bool BasicLaserMapping::createDownsizedMap()
     // Accumulate map cloud
     this->_laserCloudSurround->clear();
 
-    for (auto ind : _laserCloudSurroundInd) {
+    for (auto ind : this->_laserCloudSurroundInd) {
         *this->_laserCloudSurround += *this->_laserCloudCornerArray[ind];
         *this->_laserCloudSurround += *this->_laserCloudSurfArray[ind];
     }
@@ -335,11 +344,11 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
     pointOnYAxis.z = 0.0f;
     pointOnYAxis = this->pointAssociateToMap(pointOnYAxis);
 
-    // `CUBE_SIZE` and `CUBE_HALF` are in centimeters (50cm and 25cm)
+    // `CUBE_SIZE` and `CUBE_HALF` are in meters (50m and 25m)
     const auto CUBE_SIZE = 50.0f;
     const auto CUBE_HALF = CUBE_SIZE / 2.0f;
 
-    // Compute the index of the center cube in the 10.5x5.5x10.5m cubic area,
+    // Compute the index of the center cube in the 1050x550x1050m cubic area,
     // and each cube stores the point cloud
     // `_laserCloudCenWidth`, `_laserCloudCenHeight`, and `_laserCloudCenDepth`
     // are initially set to 10, 5, and 10, respectively, and the number of
@@ -482,7 +491,8 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
         this->_laserCloudSurfFromMap->size() > 100)
         this->optimizeTransformTobeMapped();
     else
-        ROS_WARN("Pose is not optimized since the map is too small: "
+        ROS_WARN("Pose is not optimized in LaserMapping node "
+                 "since the map is too small: "
                  "_laserCloudCornerFromMap->size(): %zu, "
                  "_laserCloudSurfFromMap->size(): %zu",
                  this->_laserCloudCornerFromMap->size(),
@@ -803,7 +813,7 @@ void BasicLaserMapping::optimizeTransformTobeMapped()
             // Point-to-edge or point-to-plane distance is stored in the
             // intensity field in the coefficient
             // Reverse the sign of the residual to follow Gauss-Newton method
-            vecB(i, 0) = -coeff.intensity;
+            vecB(i, 0) = -this->_residualScale * coeff.intensity;
         }
 
         matAt = matA.transpose();
@@ -884,7 +894,10 @@ bool BasicLaserMapping::checkDegeneration(
     Eigen::Matrix<float, 6, 6> matV2 = matV;
 
     bool isDegenerate = false;
-    const float eigenThreshold[6] = { 100, 100, 100, 100, 100, 100 };
+    const float eigenThreshold[6] = {
+        this->_eigenThresholdRot, this->_eigenThresholdRot,
+        this->_eigenThresholdRot, this->_eigenThresholdTrans,
+        this->_eigenThresholdTrans, this->_eigenThresholdTrans };
 
     // Eigenvalues are sorted in the increasing order
     // Detect the occurrence of the degeneration if one of the eigenvalues is
@@ -936,7 +949,7 @@ void BasicLaserMapping::computeCornerDistances()
 
         // If distances to all closest neighbors are less than 1m, then
         // compute the coefficient for the Gauss-Newton optimization
-        if (pointSearchSqDis[4] >= 1.0f)
+        if (pointSearchSqDis[4] >= this->_sqDistThresholdCorner)
             continue;
 
         // Store the average of the closest neighbor coordinates
@@ -1003,9 +1016,9 @@ void BasicLaserMapping::computeCornerDistances()
         const float ld2 = a012 / l12;
 
         // Compute the bisquare weight
-        const float s = 1.0f - 0.9f * std::fabs(ld2);
+        const float s = 1.0f - this->_weightDecayCorner * std::fabs(ld2);
 
-        if (s <= 0.1f)
+        if (s <= this->_weightThresholdCorner)
             continue;
 
         // Compute the coefficient for the pose optimization
@@ -1062,7 +1075,7 @@ void BasicLaserMapping::computePlaneDistances()
 
         // If distances to all closest neighbors are less than 1m, then
         // compute the coefficient for the Gauss-Newton optimization
-        if (pointSearchSqDis[4] >= 1.0f)
+        if (pointSearchSqDis[4] >= this->_sqDistThresholdSurface)
             continue;
 
         // Store coordinates of the closest neighbors to the matrix
@@ -1098,10 +1111,10 @@ void BasicLaserMapping::computePlaneDistances()
                           * pointSel.getVector3fMap() + pd;
 
         // Compute the bisquare weight
-        const float s = 1.0f - 0.9f * std::fabs(pd2)
+        const float s = 1.0f - this->_weightDecaySurface * std::fabs(pd2)
                         / std::sqrt(calcPointDistance(pointSel));
 
-        if (s <= 0.1f)
+        if (s <= this->_weightThresholdSurface)
             continue;
 
         pcl::PointXYZI coeff;
