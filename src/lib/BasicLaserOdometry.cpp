@@ -210,6 +210,9 @@ void BasicLaserOdometry::process()
 
     this->_frameCount++;
 
+    if (this->_frameCount % 10 == 0)
+        ROS_INFO("Processing the frame: %ld", this->_frameCount);
+
     // Initialize the transform between the odometry poses
     // `_imuVeloFromStart * _scanPeriod` could be multiplied by 0.5
     // since `_imuVeloFromStart` is the multiply of the acceleration and
