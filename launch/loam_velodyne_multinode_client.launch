@@ -13,6 +13,14 @@
         <param name="systemDelay" value="0" />
         <param name="lidar" value="$(arg lidar)" />
         <param name="scanPeriod" value="$(arg scanPeriod)" />
+        <!-- <param name="imuHistorySize" value="200" /> -->
+        <!-- <param name="featureRegions" value="6" /> -->
+        <!-- <param name="curvatureRegion" value="5" /> -->
+        <!-- <param name="maxCornerSharp" value="2" /> -->
+        <!-- <param name="maxCornerLessSharp" value="20" /> -->
+        <!-- <param name="maxSurfaceFlat" value="4" /> -->
+        <!-- <param name="surfaceCurvatureThreshold" value="0.1" /> -->
+        <!-- <param name="lessFlatFilterSize" value="0.2" /> -->
         <param name="publishFullPointCloud"
                value="$(arg publishFullPointCloud)" />
         <param name="publishMetrics" value="$(arg publishMetrics)" />

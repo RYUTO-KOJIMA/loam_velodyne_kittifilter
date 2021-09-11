@@ -13,6 +13,19 @@
     <node pkg="loam_velodyne" type="laserOdometry"
           name="laserOdometry" output="screen" respawn="true">
         <param name="scanPeriod" value="$(arg scanPeriod)" />
+        <!-- <param name="ioRatio" value="2" /> -->
+        <!-- <param name="maxIterations" value="25" /> -->
+        <!-- <param name="deltaTAbort" value="0.1" /> -->
+        <!-- <param name="deltaRAbort" value="0.1" /> -->
+        <!-- <param name="residualScale" value="0.05" /> -->
+        <!-- <param name="eigenThresholdTrans" value="10.0" /> -->
+        <!-- <param name="eigenThresholdRot" value="10.0" /> -->
+        <!-- <param name="weightDecayCorner" value="1.8" /> -->
+        <!-- <param name="weightThresholdCorner" value="0.1" /> -->
+        <!-- <param name="sqDistThresholdCorner" value="25.0" /> -->
+        <!-- <param name="weightDecaySurface" value="1.8" /> -->
+        <!-- <param name="weightThresholdSurface" value="0.1" /> -->
+        <!-- <param name="sqDistThresholdSurface" value="25.0" /> -->
         <param name="pointUndistorted" value="$(arg pointUndistorted)" />
         <param name="publishFullPointCloud"
                value="$(arg publishFullPointCloud)" />
@@ -22,6 +35,21 @@
     <node pkg="loam_velodyne" type="laserMapping"
           name="laserMapping" output="screen">
         <param name="scanPeriod" value="$(arg scanPeriod)" />
+        <!-- <param name="maxIterations" value="10" /> -->
+        <!-- <param name="deltaTAbort" value="0.05" /> -->
+        <!-- <param name="deltaRAbort" value="0.05" /> -->
+        <!-- <param name="cornerFilterSize" value="0.2" /> -->
+        <!-- <param name="surfaceFilterSize" value="0.4" /> -->
+        <!-- <param name="mapFilterSize" value="0.0" /> -->
+        <!-- <param name="residualScale" value="1.0" /> -->
+        <!-- <param name="eigenThresholdTrans" value="100.0" /> -->
+        <!-- <param name="eigenThresholdRot" value="100.0" /> -->
+        <!-- <param name="sqDistThresholdCorner" value="1.0" /> -->
+        <!-- <param name="weightDecayCorner" value="0.9" /> -->
+        <!-- <param name="weightThresholdCorner" value="0.1" /> -->
+        <!-- <param name="sqDistThresholdSurface" value="1.0" /> -->
+        <!-- <param name="weightDecaySurface" value="0.9" /> -->
+        <!-- <param name="weightThresholdSurface" value="0.1" /> -->
         <param name="publishFullPointCloud"
                value="$(arg publishFullPointCloud)" />
         <param name="publishMetrics" value="$(arg publishMetrics)" />
