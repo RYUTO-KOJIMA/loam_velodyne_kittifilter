@@ -47,10 +47,12 @@ bool ScanRegistration::parseParams(
 {
     int intVal = 0;
     float floatVal = 0.0f;
+    bool boolVal = false;
 
     if (nh.getParam("scanPeriod", floatVal)) {
         if (floatVal <= 0) {
-            ROS_ERROR("Invalid scanPeriod: %f (expected > 0)", floatVal);
+            ROS_ERROR("Invalid scanPeriod: %f "
+                      "(expected > 0, default: 0.1)", floatVal);
             return false;
         } else {
             configOut.scanPeriod = floatVal;
@@ -60,7 +62,8 @@ bool ScanRegistration::parseParams(
 
     if (nh.getParam("imuHistorySize", intVal)) {
         if (intVal < 1) {
-            ROS_ERROR("Invalid imuHistorySize: %d (expected >= 1)", intVal);
+            ROS_ERROR("Invalid imuHistorySize: %d "
+                      "(expected >= 1, default: 200)", intVal);
             return false;
         } else {
             configOut.imuHistorySize = intVal;
@@ -70,7 +73,8 @@ bool ScanRegistration::parseParams(
 
     if (nh.getParam("featureRegions", intVal)) {
         if (intVal < 1) {
-            ROS_ERROR("Invalid featureRegions: %d (expected >= 1)", intVal);
+            ROS_ERROR("Invalid featureRegions: %d "
+                      "(expected >= 1, default: 6)", intVal);
             return false;
         } else {
             configOut.nFeatureRegions = intVal;
@@ -80,7 +84,8 @@ bool ScanRegistration::parseParams(
 
     if (nh.getParam("curvatureRegion", intVal)) {
         if (intVal < 1) {
-            ROS_ERROR("Invalid curvatureRegion: %d (expected >= 1)", intVal);
+            ROS_ERROR("Invalid curvatureRegion: %d "
+                      "(expected >= 1, default: 5)", intVal);
             return false;
         } else {
             configOut.curvatureRegion = intVal;
@@ -90,7 +95,8 @@ bool ScanRegistration::parseParams(
 
     if (nh.getParam("maxCornerSharp", intVal)) {
         if (intVal < 1) {
-            ROS_ERROR("Invalid maxCornerSharp: %d (expected >= 1)", intVal);
+            ROS_ERROR("Invalid maxCornerSharp: %d "
+                      "(expected >= 1, default: 2)", intVal);
             return false;
         } else {
             configOut.maxCornerSharp = intVal;
@@ -102,7 +108,8 @@ bool ScanRegistration::parseParams(
 
     if (nh.getParam("maxCornerLessSharp", intVal)) {
         if (intVal < configOut.maxCornerSharp) {
-            ROS_ERROR("Invalid maxCornerLessSharp: %d (expected >= %d)",
+            ROS_ERROR("Invalid maxCornerLessSharp: %d "
+                      "(expected >= %d, default: 20)",
                       intVal, configOut.maxCornerSharp);
             return false;
         } else {
@@ -113,7 +120,8 @@ bool ScanRegistration::parseParams(
 
     if (nh.getParam("maxSurfaceFlat", intVal)) {
         if (intVal < 1) {
-            ROS_ERROR("Invalid maxSurfaceFlat: %d (expected >= 1)", intVal);
+            ROS_ERROR("Invalid maxSurfaceFlat: %d "
+                      "(expected >= 1, default: 4)", intVal);
             return false;
         } else {
             configOut.maxSurfaceFlat = intVal;
@@ -123,8 +131,8 @@ bool ScanRegistration::parseParams(
 
     if (nh.getParam("surfaceCurvatureThreshold", floatVal)) {
         if (floatVal < 0.001) {
-            ROS_ERROR("Invalid surfaceCurvatureThreshold: "
-                      "%f (expected >= 0.001)", floatVal);
+            ROS_ERROR("Invalid surfaceCurvatureThreshold: %f "
+                      "(expected >= 0.001, default: 0.1)", floatVal);
             return false;
         } else {
             configOut.surfaceCurvatureThreshold = floatVal;
@@ -134,8 +142,8 @@ bool ScanRegistration::parseParams(
 
     if (nh.getParam("lessFlatFilterSize", floatVal)) {
         if (floatVal < 0.001) {
-            ROS_ERROR("Invalid lessFlatFilterSize: "
-                      "%f (expected >= 0.001)", floatVal);
+            ROS_ERROR("Invalid lessFlatFilterSize: %f "
+                      "(expected >= 0.001, default: 0.2)", floatVal);
             return false;
         } else {
             configOut.lessFlatFilterSize = floatVal;
@@ -143,10 +151,14 @@ bool ScanRegistration::parseParams(
         }
     }
 
-    if (!nh.getParam("publishFullPointCloud", this->_fullPointCloudPublished))
+    if (nh.getParam("publishFullPointCloud", boolVal))
+        this->_fullPointCloudPublished = boolVal;
+    else
         this->_fullPointCloudPublished = true;
 
-    if (!nh.getParam("publishMetrics", this->_metricsEnabled))
+    if (nh.getParam("publishMetrics", boolVal))
+        this->_metricsEnabled = boolVal;
+    else
         this->_metricsEnabled = false;
 
     return true;
