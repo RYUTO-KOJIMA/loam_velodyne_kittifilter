@@ -55,9 +55,9 @@ namespace loam {
 class LaserOdometry : public BasicLaserOdometry
 {
 public:
-    LaserOdometry(float scanPeriod = 0.1,
-                  std::uint16_t ioRatio = 2,
-                  std::size_t maxIterations = 25);
+    LaserOdometry(const float scanPeriod = 0.1,
+                  const std::uint16_t ioRatio = 2,
+                  const std::size_t maxIterations = 25);
 
     /** \brief Setup component.
      *
@@ -173,6 +173,11 @@ private:
     ros::Subscriber _subLaserCloudFullRes;
     // IMU transformation message subscriber
     ros::Subscriber _subImuTrans;
+
+    // Flag enabled if the new point cloud is not processed by the node
+    bool _pointCloudUnprocessed;
+    // Number of the dropped point clouds
+    int _numOfDroppedPointClouds;
 };
 
 } // namespace loam

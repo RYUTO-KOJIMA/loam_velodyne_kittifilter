@@ -41,7 +41,17 @@ using namespace loam_velodyne;
 namespace loam {
 
 LaserMapping::LaserMapping(const float scanPeriod,
-                           const std::size_t maxIterations)
+                           const std::size_t maxIterations) :
+    _timeLaserCloudCornerLast(0.0),
+    _timeLaserCloudSurfLast(0.0),
+    _timeLaserCloudFullRes(0.0),
+    _timeLaserOdometry(0.0),
+    _newLaserCloudCornerLast(false),
+    _newLaserCloudSurfLast(false),
+    _newLaserCloudFullRes(false),
+    _newLaserOdometry(false),
+    _pointCloudUnprocessed(false),
+    _numOfDroppedPointClouds(0)
 {
     // Initialize mapping odometry and odometry tf messages
     this->_odomAftMapped.header.frame_id = "camera_init";
@@ -173,6 +183,18 @@ bool LaserMapping::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
 void LaserMapping::laserCloudCornerLastHandler(
     const sensor_msgs::PointCloud2ConstPtr& cornerPointsLastMsg)
 {
+    // Check that the previous point cloud is not processed by the node
+    // If not processed, increment the number of the dropped point clouds
+    if (this->_pointCloudUnprocessed) {
+        ++this->_numOfDroppedPointClouds;
+        ROS_WARN("Point cloud is dropped by LaserMapping node "
+                 "(Number of the dropped point clouds: %d)",
+                 this->_numOfDroppedPointClouds);
+    }
+
+    // Set the flag to indicate that the current point cloud is not processed
+    this->_pointCloudUnprocessed = true;
+
     this->_timeLaserCloudCornerLast = cornerPointsLastMsg->header.stamp;
     this->laserCloudCornerLast().clear();
     pcl::fromROSMsg(*cornerPointsLastMsg, this->laserCloudCornerLast());
@@ -254,6 +276,7 @@ void LaserMapping::reset()
     this->_newLaserCloudSurfLast = false;
     this->_newLaserCloudFullRes = false;
     this->_newLaserOdometry = false;
+    this->_pointCloudUnprocessed = false;
 }
 
 bool LaserMapping::hasNewData()

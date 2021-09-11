@@ -43,11 +43,25 @@ using namespace loam_velodyne;
 
 namespace loam {
 
-LaserOdometry::LaserOdometry(float scanPeriod,
-                             std::uint16_t ioRatio,
-                             std::size_t maxIterations) :
+LaserOdometry::LaserOdometry(const float scanPeriod,
+                             const std::uint16_t ioRatio,
+                             const std::size_t maxIterations) :
     BasicLaserOdometry(scanPeriod, maxIterations),
-    _ioRatio(ioRatio)
+    _ioRatio(ioRatio),
+    _timeCornerPointsSharp(0.0),
+    _timeCornerPointsLessSharp(0.0),
+    _timeSurfPointsFlat(0.0),
+    _timeSurfPointsLessFlat(0.0),
+    _timeLaserCloudFullRes(0.0),
+    _timeImuTrans(0.0),
+    _newCornerPointsSharp(false),
+    _newCornerPointsLessSharp(false),
+    _newSurfPointsFlat(false),
+    _newSurfPointsLessFlat(false),
+    _newLaserCloudFullRes(false),
+    _newImuTrans(false),
+    _pointCloudUnprocessed(false),
+    _numOfDroppedPointClouds(0)
 {
     // Initialize odometry and odometry tf messages
     this->_laserOdometryMsg.header.frame_id = "camera_init";
@@ -168,11 +182,24 @@ void LaserOdometry::reset()
     this->_newSurfPointsLessFlat = false;
     this->_newLaserCloudFullRes = false;
     this->_newImuTrans = false;
+    this->_pointCloudUnprocessed = false;
 }
 
 void LaserOdometry::laserCloudSharpHandler(
     const sensor_msgs::PointCloud2ConstPtr& cornerPointsSharpMsg)
 {
+    // Check that the previous point cloud is not processed by the node
+    // If not processed, increment the number of the dropped point clouds
+    if (this->_pointCloudUnprocessed) {
+        ++this->_numOfDroppedPointClouds;
+        ROS_WARN("Point cloud is dropped by LaserOdometry node "
+                 "(Number of the dropped point clouds: %d)",
+                 this->_numOfDroppedPointClouds);
+    }
+
+    // Set the flag to indicate that the current point cloud is not processed
+    this->_pointCloudUnprocessed = true;
+
     this->_timeCornerPointsSharp = cornerPointsSharpMsg->header.stamp;
 
     this->cornerPointsSharp()->clear();

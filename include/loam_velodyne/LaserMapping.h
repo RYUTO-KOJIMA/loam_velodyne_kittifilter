@@ -115,50 +115,55 @@ protected:
     void publishResult();
 
 private:
-    // time of current last corner cloud
+    // Time of current last corner cloud
     ros::Time _timeLaserCloudCornerLast;
-    // time of current last surface cloud
+    // Time of current last surface cloud
     ros::Time _timeLaserCloudSurfLast;
-    // time of current full resolution cloud
+    // Time of current full resolution cloud
     ros::Time _timeLaserCloudFullRes;
-    // time of current laser odometry
+    // Time of current laser odometry
     ros::Time _timeLaserOdometry;
 
-    // flag if a new last corner cloud has been received
+    // Flag if a new last corner cloud has been received
     bool _newLaserCloudCornerLast;
-    // flag if a new last surface cloud has been received
+    // Flag if a new last surface cloud has been received
     bool _newLaserCloudSurfLast;
-    // flag if a new full resolution cloud has been received
+    // Flag if a new full resolution cloud has been received
     bool _newLaserCloudFullRes;
-    // flag if a new laser odometry has been received
+    // Flag if a new laser odometry has been received
     bool _newLaserOdometry;
 
-    // mapping odometry message
+    // Mapping odometry message
     nav_msgs::Odometry _odomAftMapped;
-    // mapping odometry transformation
+    // Mapping odometry transformation
     tf::StampedTransform _aftMappedTrans;
 
-    // map cloud message publisher
+    // Map cloud message publisher
     ros::Publisher _pubLaserCloudSurround;
-    // current full resolution cloud message publisher
+    // Current full resolution cloud message publisher
     ros::Publisher _pubLaserCloudFullRes;
-    // mapping odometry publisher
+    // Mapping odometry publisher
     ros::Publisher _pubOdomAftMapped;
-    // mapping odometry transform broadcaster
+    // Mapping odometry transform broadcaster
     tf::TransformBroadcaster _tfBroadcaster;
     // Metrics message publisher
     ros::Publisher _pubMetrics;
 
-    // last corner cloud message subscriber
+    // Last corner cloud message subscriber
     ros::Subscriber _subLaserCloudCornerLast;
-    // last surface cloud message subscriber
+    // Last surface cloud message subscriber
     ros::Subscriber _subLaserCloudSurfLast;
-    // full resolution cloud message subscriber
+    // Full resolution cloud message subscriber
     ros::Subscriber _subLaserCloudFullRes;
-    // laser odometry message subscriber
+    // Laser odometry message subscriber
     ros::Subscriber _subLaserOdometry;
     // IMU message subscriber
     ros::Subscriber _subImu;
+
+    // Flag enabled if the new point cloud is not processed by the node
+    bool _pointCloudUnprocessed;
+    // Number of the dropped point clouds
+    int _numOfDroppedPointClouds;
 };
 
 } // namespace loam
