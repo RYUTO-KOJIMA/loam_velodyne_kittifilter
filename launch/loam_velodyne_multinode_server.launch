@@ -3,6 +3,8 @@
     <arg name="scanPeriod" default="0.1" />
     <!-- Set to true if Kitti odometry dataset is used -->
     <arg name="pointUndistorted" default="false" />
+    <!-- Set to HDL-64E if Kitti odometry dataset is used -->
+    <arg name="lidar" default="VLP-16" />
     <arg name="publishMetrics" default="true" />
 
     <node pkg="loam_velodyne" type="laserOdometry"
