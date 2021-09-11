@@ -45,6 +45,12 @@
         <!-- <param name="weightDecaySurface" value="1.8" /> -->
         <!-- <param name="weightThresholdSurface" value="0.1" /> -->
         <!-- <param name="sqDistThresholdSurface" value="25.0" /> -->
+
+        <!-- Below settings are for Kitti odometry dataset (sequence 00) -->
+        <!-- <param name="residualScale" value="0.1" />
+        <param name="sqDistThresholdCorner" value="30.25" />
+        <param name="sqDistThresholdSurface" value="30.25" /> -->
+
         <param name="pointUndistorted" value="$(arg pointUndistorted)" />
         <param name="publishFullPointCloud"
                value="$(arg publishFullPointCloud)" />
