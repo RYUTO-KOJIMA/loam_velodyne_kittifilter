@@ -374,6 +374,9 @@ void LaserMapping::publishResult()
 
     // Set the timestamp of the metrics message
     this->_metricsMsg.stamp = ros::Time::now();
+    // Set the number of the dropped point clouds
+    this->_metricsMsg.num_of_dropped_point_clouds =
+        this->_numOfDroppedPointClouds;
 
     // Publish the metrics message
     if (this->_metricsEnabled)

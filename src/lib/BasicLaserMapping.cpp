@@ -1127,6 +1127,7 @@ void BasicLaserMapping::clearMetricsMsg()
     this->_metricsMsg.num_of_full_res_points = 0;
     this->_metricsMsg.num_of_surround_points = 0;
     this->_metricsMsg.num_of_surround_points_before_ds = 0;
+    this->_metricsMsg.num_of_dropped_point_clouds = 0;
 
     this->_metricsMsg.process_time = ros::Duration(0.0);
     this->_metricsMsg.num_of_query_sharp_points_before_ds = 0;

@@ -12,6 +12,8 @@ uint32 num_of_full_res_points
 uint32 num_of_less_sharp_points
 # Number of the less-flat points (including flat points)
 uint32 num_of_less_flat_points
+# Number of the dropped point clouds
+uint32 num_of_dropped_point_clouds
 
 # Metrics updated in BasicLaserOdometry::process()
 # Total processing time

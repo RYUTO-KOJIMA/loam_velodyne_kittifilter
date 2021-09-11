@@ -965,6 +965,7 @@ void BasicLaserOdometry::clearMetricsMsg()
     this->_metricsMsg.num_of_full_res_points = 0;
     this->_metricsMsg.num_of_less_sharp_points = 0;
     this->_metricsMsg.num_of_less_flat_points = 0;
+    this->_metricsMsg.num_of_dropped_point_clouds = 0;
 
     this->_metricsMsg.process_time = ros::Duration(0.0);
     this->_metricsMsg.num_of_query_sharp_points = 0;

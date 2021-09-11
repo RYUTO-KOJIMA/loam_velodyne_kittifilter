@@ -12,6 +12,8 @@ uint32 num_of_full_res_points
 uint32 num_of_surround_points
 # Number of the points in the map of the surrounding (before downsampling)
 uint32 num_of_surround_points_before_ds
+# Number of the dropped point clouds
+uint32 num_of_dropped_point_clouds
 
 # Metrics updated in BasicLaserMapping::process()
 # Total processing time

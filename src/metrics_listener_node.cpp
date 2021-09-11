@@ -223,6 +223,8 @@ pt::ptree MetricsListener::ToPropertyTree(
                     metrics->num_of_less_sharp_points);
     jsonMetrics.put("NumOfLessFlatPoints",
                     metrics->num_of_less_flat_points);
+    jsonMetrics.put("NumOfDroppedPointClouds",
+                    metrics->num_of_dropped_point_clouds);
 
     jsonMetrics.put("ProcessTime",
                     metrics->process_time.toNSec());
@@ -277,6 +279,8 @@ pt::ptree MetricsListener::ToPropertyTree(
                     metrics->num_of_surround_points);
     jsonMetrics.put("NumOfSurroundPointsBeforeDS",
                     metrics->num_of_surround_points_before_ds);
+    jsonMetrics.put("NumOfDroppedPointClouds",
+                    metrics->num_of_dropped_point_clouds);
 
     jsonMetrics.put("ProcessTime",
                     metrics->process_time.toNSec());
