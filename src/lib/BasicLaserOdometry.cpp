@@ -657,7 +657,9 @@ void BasicLaserOdometry::findCornerCorrespondence()
 
         // The below should be `j < lastCornerCloudSize` instead of
         // `j < cornerPointsSharpNum`
-        for (int j = closestPointInd + 1; j < cornerPointsSharpNum; ++j) {
+        const int lastCornerCloudSize = this->_lastCornerCloud->size();
+        // for (int j = closestPointInd + 1; j < cornerPointsSharpNum; ++j) {
+        for (int j = closestPointInd + 1; j < lastCornerCloudSize; ++j) {
             const auto& scanPoint = this->_lastCornerCloud->points[j];
             const int scanId = static_cast<int>(scanPoint.intensity);
 
@@ -883,7 +885,9 @@ void BasicLaserOdometry::findPlaneCorrespondence()
 
         // The below should be `j < _lastSurfaceCloud` instead of
         // `j < surfPointsFlatNum`
-        for (int j = closestPointInd + 1; j < surfPointsFlatNum; ++j) {
+        const int lastSurfaceCloudSize = this->_lastSurfaceCloud->size();
+        // for (int j = closestPointInd + 1; j < surfPointsFlatNum; ++j) {
+        for (int j = closestPointInd + 1; j < lastSurfaceCloudSize; ++j) {
             const auto& scanPoint = this->_lastSurfaceCloud->points[j];
             const int scanId = static_cast<int>(scanPoint.intensity);
 
