@@ -479,6 +479,12 @@ bool BasicLaserMapping::process(const Time& laserOdometryTime)
     if (this->_laserCloudCornerFromMap->size() > 10 &&
         this->_laserCloudSurfFromMap->size() > 100)
         this->optimizeTransformTobeMapped();
+    else
+        ROS_WARN("Pose is not optimized since the map is too small: "
+                 "_laserCloudCornerFromMap->size(): %zu, "
+                 "_laserCloudSurfFromMap->size(): %zu",
+                 this->_laserCloudCornerFromMap->size(),
+                 this->_laserCloudSurfFromMap->size());
 
     // Store downsized corner stack points in corresponding cube clouds
     for (int i = 0; i < this->_laserCloudCornerStackDS->size(); ++i) {
