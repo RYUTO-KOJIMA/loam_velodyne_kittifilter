@@ -3,13 +3,20 @@
     <arg name="scanPeriod" default="0.1" />
     <!-- Set to true if Kitti odometry dataset is used -->
     <arg name="pointUndistorted" default="false" />
+    <!-- Set to HDL-64E if Kitti odometry dataset is used -->
+    <arg name="lidar" default="VLP-16" />
     <arg name="publishMetrics" default="true" />
+    <arg name="listenOdometry" default="true" />
+    <!-- Set to false when not visualizing the output -->
+    <arg name="publishFullPointCloud" default="true" />
 
     <node pkg="loam_velodyne" type="multiScanRegistration"
           name="multiScanRegistration" output="screen">
         <param name="systemDelay" value="0" />
-        <param name="lidar" value="VLP-16" />
+        <param name="lidar" value="$(arg lidar)" />
         <param name="scanPeriod" value="$(arg scanPeriod)" />
+        <param name="publishFullPointCloud"
+               value="$(arg publishFullPointCloud)" />
         <param name="publishMetrics" value="$(arg publishMetrics)" />
         <remap from="/multi_scan_points" to="/velodyne_points" />
     </node>
@@ -18,12 +25,16 @@
           name="laserOdometry" output="screen" respawn="true">
         <param name="scanPeriod" value="$(arg scanPeriod)" />
         <param name="pointUndistorted" value="$(arg pointUndistorted)" />
+        <param name="publishFullPointCloud"
+               value="$(arg publishFullPointCloud)" />
         <param name="publishMetrics" value="$(arg publishMetrics)" />
     </node>
 
     <node pkg="loam_velodyne" type="laserMapping"
           name="laserMapping" output="screen">
         <param name="scanPeriod" value="$(arg scanPeriod)" />
+        <param name="publishFullPointCloud"
+               value="$(arg publishFullPointCloud)" />
         <param name="publishMetrics" value="$(arg publishMetrics)" />
     </node>
 
@@ -32,11 +43,15 @@
         <param name="publishMetrics" value="$(arg publishMetrics)" />
     </node>
 
-    <node pkg="loam_velodyne" type="odometryListener"
-          name="odometryListener" output="screen" />
+    <group if="$(arg listenOdometry)">
+        <node pkg="loam_velodyne" type="odometryListener"
+              name="odometryListener" output="screen" />
+    </group>
 
-    <node pkg="loam_velodyne" type="metricsListener"
-          name="metricsListener" output="screen" />
+    <group if="$(arg publishMetrics)">
+        <node pkg="loam_velodyne" type="metricsListener"
+              name="metricsListener" output="screen" />
+    </group>
 
     <group if="$(arg rviz)">
         <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz"

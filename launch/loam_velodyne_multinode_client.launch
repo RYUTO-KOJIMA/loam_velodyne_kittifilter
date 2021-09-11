@@ -1,17 +1,20 @@
 <launch>
-    <arg name="rviz" default="true" />
     <arg name="scanPeriod" default="0.1" />
     <!-- Set to true if Kitti odometry dataset is used -->
     <arg name="pointUndistorted" default="false" />
     <!-- Set to HDL-64E if Kitti odometry dataset is used -->
     <arg name="lidar" default="VLP-16" />
     <arg name="publishMetrics" default="true" />
+    <!-- Set to false when not visualizing the output -->
+    <arg name="publishFullPointCloud" default="true" />
 
     <node pkg="loam_velodyne" type="multiScanRegistration"
           name="multiScanRegistration" output="screen">
         <param name="systemDelay" value="0" />
         <param name="lidar" value="$(arg lidar)" />
         <param name="scanPeriod" value="$(arg scanPeriod)" />
+        <param name="publishFullPointCloud"
+               value="$(arg publishFullPointCloud)" />
         <param name="publishMetrics" value="$(arg publishMetrics)" />
         <remap from="/multi_scan_points" to="/velodyne_points" />
     </node>
