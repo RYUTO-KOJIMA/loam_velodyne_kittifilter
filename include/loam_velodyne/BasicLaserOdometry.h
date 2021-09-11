@@ -100,6 +100,10 @@ protected:
     void clearMetricsMsg();
 
 protected:
+    // Flag enabled if the input point clouds are undistorted
+    // Point clouds in Kitti odometry dataset are undistorted
+    bool _pointUndistorted;
+
     // Flag to enable the metrics
     bool _metricsEnabled;
     // Metrics message

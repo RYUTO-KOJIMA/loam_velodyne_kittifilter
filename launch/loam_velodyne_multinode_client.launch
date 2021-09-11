@@ -1,6 +1,8 @@
 <launch>
     <arg name="rviz" default="true" />
     <arg name="scanPeriod" default="0.1" />
+    <!-- Set to true if Kitti odometry dataset is used -->
+    <arg name="pointUndistorted" default="false" />
     <arg name="publishMetrics" default="true" />
 
     <node pkg="loam_velodyne" type="multiScanRegistration"

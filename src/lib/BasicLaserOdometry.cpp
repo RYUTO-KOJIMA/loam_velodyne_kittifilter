@@ -18,6 +18,7 @@ BasicLaserOdometry::BasicLaserOdometry(
     _systemInited(false),
     _frameCount(0),
     _maxIterations(maxIterations),
+    _pointUndistorted(false),
     _deltaTAbort(0.1),
     _deltaRAbort(0.1),
     _cornerPointsSharp(new pcl::PointCloud<pcl::PointXYZI>()),
@@ -35,7 +36,8 @@ BasicLaserOdometry::BasicLaserOdometry(
 pcl::PointXYZI BasicLaserOdometry::transformToStart(const pcl::PointXYZI& pi)
 {
     const float relTime = pi.intensity - static_cast<int>(pi.intensity);
-    const float s = (1.0f / this->_scanPeriod) * relTime;
+    const float s = this->_pointUndistorted ? 0.0f :
+                    (1.0f / this->_scanPeriod) * relTime;
 
     pcl::PointXYZI po;
     po.x = pi.x - s * this->_transform.pos.x();
@@ -61,7 +63,8 @@ std::size_t BasicLaserOdometry::transformToEnd(
 
         // Transform to the start of the sweep
         float relTime = point.intensity - static_cast<int>(point.intensity);
-        float s = (1.0f / this->_scanPeriod) * relTime;
+        float s = this->_pointUndistorted ? 0.0f :
+                  (1.0f / this->_scanPeriod) * relTime;
 
         point.x -= s * this->_transform.pos.x();
         point.y -= s * this->_transform.pos.y();

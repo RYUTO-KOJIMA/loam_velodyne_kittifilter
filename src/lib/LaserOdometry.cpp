@@ -117,6 +117,9 @@ bool LaserOdometry::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
         }
     }
 
+    if (!privateNode.getParam("pointUndistorted", this->_pointUndistorted))
+        this->_pointUndistorted = false;
+
     if (!privateNode.getParam("publishMetrics", this->_metricsEnabled))
         this->_metricsEnabled = false;
 

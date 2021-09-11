@@ -1,6 +1,8 @@
 <launch>
     <arg name="rviz" default="true" />
     <arg name="scanPeriod" default="0.1" />
+    <!-- Set to true if Kitti odometry dataset is used -->
+    <arg name="pointUndistorted" default="false" />
     <arg name="publishMetrics" default="true" />
 
     <node pkg="loam_velodyne" type="laserOdometry"
@@ -12,6 +14,7 @@
     <node pkg="loam_velodyne" type="laserMapping"
           name="laserMapping" output="screen">
         <param name="scanPeriod" value="$(arg scanPeriod)" />
+        <param name="pointUndistorted" value="$(arg pointUndistorted)" />
         <param name="publishMetrics" value="$(arg publishMetrics)" />
     </node>
 
