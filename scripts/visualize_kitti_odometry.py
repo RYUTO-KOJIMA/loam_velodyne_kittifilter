@@ -6,7 +6,6 @@
 # loam_velodyne package
 
 import argparse
-import json
 import sys
 
 import pykitti
@@ -15,34 +14,7 @@ import pykitti.utils
 import numpy as np
 import matplotlib.pyplot as plt
 
-def load_odometry(file_name: str, topic: str):
-    # Open the odometry file
-    f = open(file_name, "r", encoding="utf-8")
-    odometry_json = json.load(f)
-    # Close the odometry file
-    f.close()
-
-    poses_json = odometry_json[topic]
-    poses = []
-
-    for pose_json in poses_json["Results"]:
-        values = list(map(float, pose_json.split()))
-        _, trans_x, trans_y, trans_z, rot_x, rot_y, rot_z = values
-
-        # Create a 3x1 translation vector
-        t = np.array([trans_z, trans_x, trans_y])
-        # Create a 3x3 rotation matrix
-        Rx = pykitti.utils.rotx(rot_x)
-        Ry = pykitti.utils.roty(rot_y)
-        Rz = pykitti.utils.rotz(rot_z)
-        R = Ry.dot(Rx.dot(Rz))
-        # Create a 4x4 transformation matrix
-        trans = pykitti.utils.transform_from_rot_trans(R, t)
-
-        # Append the transformation
-        poses.append(trans)
-
-    return poses
+from odometry_util import load_odometry
 
 def main():
     # Setup command-line options
@@ -73,7 +45,7 @@ def main():
     # Load the odometry results from the loam_velodyne package
     odometry = load_odometry(args.odometry, args.topic)
     # Transform the odometry poses to the rectified camera coordinate
-    odometry = [dataset.calib.T_cam0_velo.dot(x) for x in odometry]
+    # odometry = [dataset.calib.T_cam0_velo.dot(x) for x in odometry]
 
     # Setup figure
     fig = plt.figure()
