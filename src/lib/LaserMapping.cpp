@@ -321,6 +321,8 @@ bool LaserMapping::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
 void LaserMapping::laserCloudCornerLastHandler(
     const sensor_msgs::PointCloud2ConstPtr& cornerPointsLastMsg)
 {
+    //printf("LaserMapping: get msg !!\n");
+    
     // Check that the previous point cloud is not processed by the node
     // If not processed, increment the number of the dropped point clouds
     if (this->_pointCloudUnprocessed) {

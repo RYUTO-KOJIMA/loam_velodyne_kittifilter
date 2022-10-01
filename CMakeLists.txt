@@ -74,6 +74,12 @@ add_executable(transformMaintenance src/transform_maintenance_node.cpp)
 target_link_libraries(transformMaintenance
     ${catkin_LIBRARIES} ${PCL_LIBRARIES} loam)
 
+
+
+add_executable(kittiFilter src/kitti_filter_node.cpp)
+target_link_libraries(kittiFilter ${catkin_LIBRARIES})
+add_dependencies(kittiFilter loam_velodyne_gencpp)
+
 add_executable(odometryListener src/odometry_listener_node.cpp)
 target_link_libraries(odometryListener ${catkin_LIBRARIES} loam)
 add_dependencies(odometryListener loam_velodyne_gencpp)

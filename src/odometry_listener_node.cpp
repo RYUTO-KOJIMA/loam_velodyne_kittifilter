@@ -260,6 +260,8 @@ TwistTimed OdometryListener::ConvertToTwistTimed(
     float yaw;
     this->ConvertQuaternionToRPY(
         odometryMsg->pose.pose.orientation, roll, pitch, yaw);
+    
+    //printf ("%f %f %f\n",roll,pitch,yaw);
 
     const auto odomPosition = odometryMsg->pose.pose.position;
     loam::Twist transformOdom {
