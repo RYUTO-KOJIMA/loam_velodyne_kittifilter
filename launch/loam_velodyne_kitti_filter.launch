@@ -1,0 +1,116 @@
+<launch>
+    <arg name="rviz" default="true" />
+    <arg name="scanPeriod" default="0.1" />
+    <!-- Point clouds in Kitti odometry dataset are undistorted -->
+    <arg name="pointUndistorted" default="true" />
+    <!-- Kitti odometry dataset uses Velodyne HDL-64E -->
+    <arg name="lidar" default="HDL-64E" />
+    <arg name="publishMetrics" default="true" />
+    <arg name="listenOdometry" default="true" />
+
+    <arg name="dataset_dir" default="/home/kojima/kitti-dataset/dataset" />
+    <arg name="sequence" default="00" />
+    <arg name="sync" default="true" />
+
+    <!-- Set to false when not visualizing the output -->
+    <arg name="publishFullPointCloud" default="true" />
+
+    <node pkg="loam_velodyne" type="multiScanRegistration"
+          name="multiScanRegistration" output="screen">
+        <param name="systemDelay" value="0" />
+        <param name="lidar" value="$(arg lidar)" />
+        <param name="scanPeriod" value="$(arg scanPeriod)" />
+        <!-- <param name="imuHistorySize" value="200" /> -->
+        <!-- <param name="featureRegions" value="6" /> -->
+        <!-- <param name="curvatureRegion" value="5" /> -->
+        <!-- <param name="maxCornerSharp" value="2" /> -->
+        <!-- <param name="maxCornerLessSharp" value="20" /> -->
+        <!-- <param name="maxSurfaceFlat" value="4" /> -->
+        <!-- <param name="surfaceCurvatureThreshold" value="0.1" /> -->
+        <!-- <param name="lessFlatFilterSize" value="0.2" /> -->
+        <param name="publishFullPointCloud"
+               value="$(arg publishFullPointCloud)" />
+        <param name="publishMetrics" value="$(arg publishMetrics)" />
+        <remap from="/multi_scan_points" to="/velodyne_points" />
+    </node>
+
+    <node pkg="loam_velodyne" type="laserOdometry"
+          name="laserOdometry" output="screen" respawn="true">
+        <param name="scanPeriod" value="$(arg scanPeriod)" />
+        <!-- <param name="ioRatio" value="2" /> -->
+        <!-- <param name="maxIterations" value="25" /> -->
+        <!-- <param name="deltaTAbort" value="0.1" /> -->
+        <!-- <param name="deltaRAbort" value="0.1" /> -->
+        <!-- <param name="residualScale" value="0.05" /> -->
+        <!-- <param name="eigenThresholdTrans" value="10.0" /> -->
+        <!-- <param name="eigenThresholdRot" value="10.0" /> -->
+        <!-- <param name="weightDecayCorner" value="1.8" /> -->
+        <!-- <param name="weightThresholdCorner" value="0.1" /> -->
+        <!-- <param name="sqDistThresholdCorner" value="25.0" /> -->
+        <!-- <param name="weightDecaySurface" value="1.8" /> -->
+        <!-- <param name="weightThresholdSurface" value="0.1" /> -->
+        <!-- <param name="sqDistThresholdSurface" value="25.0" /> -->
+
+        <!-- Below settings are for Kitti odometry dataset (sequence 00) -->
+        <!-- <param name="residualScale" value="0.1" />
+        <param name="sqDistThresholdCorner" value="30.25" />
+        <param name="sqDistThresholdSurface" value="30.25" /> -->
+
+        <param name="pointUndistorted" value="$(arg pointUndistorted)" />
+        <param name="publishFullPointCloud"
+               value="$(arg publishFullPointCloud)" />
+        <param name="publishMetrics" value="$(arg publishMetrics)" />
+    </node>
+
+    <node pkg="loam_velodyne" type="laserMapping"
+          name="laserMapping" output="screen">
+        <param name="scanPeriod" value="$(arg scanPeriod)" />
+        <!-- <param name="maxIterations" value="10" /> -->
+        <!-- <param name="deltaTAbort" value="0.05" /> -->
+        <!-- <param name="deltaRAbort" value="0.05" /> -->
+        <!-- <param name="cornerFilterSize" value="0.2" /> -->
+        <!-- <param name="surfaceFilterSize" value="0.4" /> -->
+        <!-- <param name="mapFilterSize" value="0.0" /> -->
+        <!-- <param name="residualScale" value="1.0" /> -->
+        <!-- <param name="eigenThresholdTrans" value="100.0" /> -->
+        <!-- <param name="eigenThresholdRot" value="100.0" /> -->
+        <!-- <param name="sqDistThresholdCorner" value="1.0" /> -->
+        <!-- <param name="weightDecayCorner" value="0.9" /> -->
+        <!-- <param name="weightThresholdCorner" value="0.1" /> -->
+        <!-- <param name="sqDistThresholdSurface" value="1.0" /> -->
+        <!-- <param name="weightDecaySurface" value="0.9" /> -->
+        <!-- <param name="weightThresholdSurface" value="0.1" /> -->
+        <param name="publishFullPointCloud"
+               value="$(arg publishFullPointCloud)" />
+        <param name="publishMetrics" value="$(arg publishMetrics)" />
+    </node>
+
+    <node pkg="loam_velodyne" type="transformMaintenance"
+          name="transformMaintenance" output="screen">
+        <param name="publishMetrics" value="$(arg publishMetrics)" />
+    </node>
+
+    <!-- add 2022/09/25 -->
+    <node pkg="loam_velodyne" type="kitti_filter_node.py"
+        clear_params="true"
+        name="kittiFilter" output="screen">
+        <param name="dataset_dir" value="$(arg dataset_dir)" />
+        <param name="sequence" value="$(arg sequence)" />
+        <param name="sync" value="$(arg sync)" />
+    </node>
+
+    <group if="$(arg listenOdometry)">
+        <node pkg="loam_velodyne" type="odometryListener"
+              name="odometryListener" output="screen" />
+    </group>
+
+    <group if="$(arg publishMetrics)">
+        <node pkg="loam_velodyne" type="metricsListener"
+              name="metricsListener" output="screen" />
+    </group>
+
+    <group if="$(arg rviz)">
+        <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz"
+              args="-d $(find loam_velodyne)/rviz_cfg/loam_velodyne.rviz" />
+    </group>
+</launch>
