@@ -6,10 +6,11 @@ import torch.nn as nn
 CLASS_NUM = 5
 
 class SymmFunction(nn.Module):
-    def __init__(self):
+    def __init__(self,point_dimention=3):
         super(SymmFunction, self).__init__()
+        self.point_dimention = point_dimention
         self.shared_mlp = nn.Sequential(
-            nn.Linear(3, 64), nn.BatchNorm1d(64), nn.ReLU(),
+            nn.Linear(self.point_dimention, 64), nn.BatchNorm1d(64), nn.ReLU(),
             nn.Linear(64, 128), nn.BatchNorm1d(128), nn.ReLU(),
             nn.Linear(128, 512),
         )
@@ -22,25 +23,26 @@ class SymmFunction(nn.Module):
 
 
 class InputTNet(nn.Module):
-    def __init__(self):
+    def __init__(self,point_dimention=3):
         super(InputTNet, self).__init__()
+        self.point_dimention = point_dimention
         self.input_mlp = nn.Sequential(
-            nn.Linear(3, 64), nn.BatchNorm1d(64), nn.ReLU(),
+            nn.Linear(self.point_dimention, 64), nn.BatchNorm1d(64), nn.ReLU(),
             nn.Linear(64, 128), nn.BatchNorm1d(128), nn.ReLU(),
             nn.Linear(128, 1024), nn.BatchNorm1d(1024), nn.ReLU(),
         )
         self.output_mlp = nn.Sequential(
             nn.Linear(1024, 512), nn.BatchNorm1d(512), nn.ReLU(),
             nn.Linear(512, 256), nn.BatchNorm1d(256), nn.ReLU(),
-            nn.Linear(256, 9)
+            nn.Linear(256, self.point_dimention ** 2)
         )
         
     def forward(self, x, batch):
         x = self.input_mlp(x)
         x = global_max_pool(x, batch)
         x = self.output_mlp(x)
-        x = x.view(-1, 3, 3)
-        id_matrix = torch.eye(3).to(x.device).view(1, 3, 3).repeat(x.shape[0], 1, 1)
+        x = x.view(-1, self.point_dimention, self.point_dimention)
+        id_matrix = torch.eye(self.point_dimention).to(x.device).view(1, self.point_dimention, self.point_dimention).repeat(x.shape[0], 1, 1)
         x = id_matrix + x
         return x
 
@@ -71,11 +73,13 @@ class FeatureTNet(nn.Module):
 
 
 class PointNet(nn.Module):
-    def __init__(self,class_num=5):
+    def __init__(self,class_num=5,point_dimention=3):
         super(PointNet, self).__init__()
-        self.input_tnet = InputTNet()
+
+        self.point_dimention = point_dimention
+        self.input_tnet = InputTNet(self.point_dimention)
         self.mlp1 = nn.Sequential(
-            nn.Linear(3, 64), nn.BatchNorm1d(64), nn.ReLU(),
+            nn.Linear(point_dimention, 64), nn.BatchNorm1d(64), nn.ReLU(),
             nn.Linear(64, 64), nn.BatchNorm1d(64), nn.ReLU(),
         )
         self.feature_tnet = FeatureTNet()
@@ -95,7 +99,7 @@ class PointNet(nn.Module):
         
         input_transform = self.input_tnet(x, batch_data.batch)
         transform = input_transform[batch_data.batch, :, :]
-        x = torch.bmm(transform, x.view(-1, 3, 1)).view(-1, 3)
+        x = torch.bmm(transform, x.view(-1, self.point_dimention, 1)).view(-1, self.point_dimention)
         
         x = self.mlp1(x)
         

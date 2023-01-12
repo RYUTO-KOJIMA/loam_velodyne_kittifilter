@@ -84,23 +84,40 @@ class AgentDQNPointNet(AgentDQN):
 
     def __init__(self, *network_args):
         super(AgentDQNPointNet,self).__init__(*network_args)
+        self.last_point_cloud = None
 
     def init_networks(self, *network_args):
         class_num = network_args[0]
-        self.policy_net = PointNet(class_num=class_num)
-        self.target_net = PointNet(class_num=class_num)
+        self.policy_net = PointNet(class_num=class_num , point_dimention=4)
+        self.target_net = PointNet(class_num=class_num , point_dimention=4)
 
     def convert_inputcloud_to_tensor(self,given_point_cloud : PointCloudXYZI):
-        return given_point_cloud.get_converted_pointcloud_to_torch_geometric_data()
+        # create Torch.tensor which contains both given_point_cloud and self.last_point_cloud
+
+        if self.last_point_cloud != None:
+            pos = torch.tensor(
+                [ [p.x,p.y,p.z,0] for p in given_point_cloud.points] + [ [p.x,p.y,p.z,1] for p in self.last_point_cloud.points] 
+                , dtype=torch.float32 )
+        else:
+             pos = torch.tensor(
+                [ [p.x,p.y,p.z,0] for p in given_point_cloud.points] 
+                , dtype=torch.float32 )
+
+        ret_data = Data( pos=pos )
+
+        return ret_data
 
     def get_mask(self, pointcloud : PointCloudXYZI):
+
         converted_pointcloud = self.convert_inputcloud_to_tensor(pointcloud)
 
         self.policy_net.eval()
-        batch_pcl_indices = torch.zeros(pointcloud.get_point_num(),dtype=torch.long)
+        batch_pcl_indices = torch.zeros( converted_pointcloud.pos.shape[0] ,dtype=torch.long)
         wrapping_batch = MyBatch( batch_pcl_indices , converted_pointcloud.pos )
         mask,_,_ = self.policy_net(wrapping_batch)
 
+        self.last_point_cloud = pointcloud
+        print (converted_pointcloud.pos.shape , mask)
         return mask
 
     def optimize_model(self, reward):

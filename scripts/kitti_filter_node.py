@@ -6,6 +6,9 @@ import sys
 import argparse
 import rospy
 import numpy as np
+
+#import numpy
+#np.random.BitGenerator = numpy.random.bit_generator
 import pykitti
 
 import sensor_msgs.point_cloud2 as pc2
@@ -14,12 +17,21 @@ import error_calc_util as ecu
 from collections import deque
 import time
 
+import point_cloud_util as pcu
+import matplotlib.pyplot as plt
+import learning_util
+
 DATASET_DIR = ""
 
 SYNC_DEBUG = True
+ERROR_DEBUG = True
+FILTERING_DEBUG = False
 PUBLISH_WAIT = 0.01
+MASK_THRESHOLD = 0
+RING_PART_NUM = 10
 
-lengths = [10.0 , 100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0]
+lengths = [ 100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0]
+# lengths = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0]
 
 class KittiFilter:
 
@@ -47,6 +59,9 @@ class KittiFilter:
 
         #print ("read gt from",dataset_dir, " sequence id=",str(sequence).zfill(2))
 
+        # Learning objects
+        self.agent = learning_util.AgentDQNPointNet(RING_PART_NUM)
+
         #counters for debug
         self.cnt_get_raw_pcl = 0
         self.cnt_published_filtered_pcl = 0
@@ -57,6 +72,39 @@ class KittiFilter:
         if SYNC_DEBUG:
             print ("receive /raw_point_cloud, No.",self.cnt_get_raw_pcl)
         self.cnt_get_raw_pcl += 1
+
+        # test
+        tmp_pointcloud = pcu.PointCloudXYZI()
+        tmp_pointcloud.load_from_pc2_pointcloud2(gotmsg)
+
+        # get_filter
+        mask = self.agent.get_mask(tmp_pointcloud)
+        #print (mask)
+        binary_mask = [ 0 if c < MASK_THRESHOLD else 1 for c in mask[0] ]
+        #print (len(mask),mask,binary_mask)
+        
+        # filtering
+        tmp_pointcloud.filter_pointcloud_by_evation_angle(binary_mask)
+
+        if FILTERING_DEBUG:
+            x = np.zeros( tmp_pointcloud.get_point_num() )
+            for i,p in enumerate(tmp_pointcloud.points):
+                r = pcu.get_scanline_kitti_from_xyz(p)
+                x[i] = r
+            y = np.random.rand( tmp_pointcloud.get_point_num() )
+            plt.scatter(x,y)
+            plt.savefig("onseeeeeeeeeeee.png")
+            plt.show()
+        
+        #max_ring = float("-inf")
+        #min_ring = float("inf")
+        #for p in tmp_pointcloud.points:
+        #    r = pcu.get_scanline_kitti(p)
+        #    max_ring = max(max_ring , r)
+        #    min_ring = min(min_ring , r)
+        #print (min_ring,max_ring)
+
+        gotmsg = tmp_pointcloud.get_converted_pointcloud_to_pc2_pointcloud2()
 
         self.get_pcl_queue.append(gotmsg)
 
@@ -127,7 +175,8 @@ class KittiFilter:
             avr_rot_error /= len(odometry_errors)
             avr_trans_error /= len(odometry_errors)
 
-            print ("CALCERROR:",avr_rot_error , ":" , avr_trans_error)
+            if ERROR_DEBUG:
+                print ("CALCERROR:",avr_rot_error , ":" , avr_trans_error)
             
     def compute_sequence_error_now(self):
 
@@ -141,15 +190,26 @@ class KittiFilter:
 
             search_frame = None
             length_sum = 0
-            for i in range(len(self.dists_result)-1 , -1 , -1):
-                length_sum += self.dists_result[i]
-                if length_sum > length:
+            for i in range(now_frame , -1 , -1):
+                if self.dists_gt[now_frame] - self.dists_gt[i] > length:
+                    length_sum = self.dists_gt[now_frame] - self.dists_gt[i]
                     search_frame = i
                     break
             
             if search_frame == None:
                 continue
             
+            # pose_gt_s = self.poses_gt[search_frame]
+            # pose_gt_n = self.poses_gt[now_frame]
+            # pose_s = self.poses_result[search_frame]
+            # pose_n = self.poses_result[now_frame]
+            # to_str = lambda p: f"[{p[0][3]:.3f}, {p[1][3]:.3f}, {p[2][3]:.3f}]"
+
+            # print(f"poses_gt[search_frame]: {to_str(pose_gt_s)}, " \
+            #       f"poses_gt[now_frame]: {to_str(pose_gt_n)}, " \
+            #       f"poses_result[search_frame]: {to_str(pose_s)}, "
+            #       f"poses_result[now_frame]: {to_str(pose_n)}")
+
             #compute rotational and translational errors
             pose_delta_gt = np.linalg.inv(self.poses_gt[search_frame]) @ \
                             self.poses_gt[now_frame]
@@ -183,4 +243,7 @@ if __name__ == '__main__':
     #args = perser.parse_args()
 
     KittiFilter()
+
+
+
     rospy.spin()

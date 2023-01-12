@@ -26,10 +26,10 @@ from geometry_msgs.msg import Vector3
 
 class Twist:
     def __init__(self ,tx,ty,tz,rx,ry,rz):
-        self.rot_x = tx
-        self.rot_y = ty
-        self.rot_z = tz
-        self.pos = (rx,ry,rz)
+        self.rot_x = rx
+        self.rot_y = ry
+        self.rot_z = rz
+        self.pos = (tx,ty,tz)
 
 class TwistTimed:
     def __init__(self, twist:Twist , timestamp , frameID, childFrameId):
