@@ -27,8 +27,9 @@ SYNC_DEBUG = True
 ERROR_DEBUG = True
 FILTERING_DEBUG = False
 PUBLISH_WAIT = 0.01
-MASK_THRESHOLD = 0
 RING_PART_NUM = 10
+
+POINTNET_DQN_POINTNET_AND_LSTM = True
 
 lengths = [ 100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0]
 # lengths = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0]
@@ -60,31 +61,34 @@ class KittiFilter:
         #print ("read gt from",dataset_dir, " sequence id=",str(sequence).zfill(2))
 
         # Learning objects
-        self.agent = learning_util.AgentDQNPointNet(RING_PART_NUM)
+        self.agent = learning_util.AgentDQNPointNet(2**RING_PART_NUM)
 
         #counters for debug
         self.cnt_get_raw_pcl = 0
         self.cnt_published_filtered_pcl = 0
         self.cnt_get_result = 0
-
-    def callback_raw_pcl( self , gotmsg : pc2.PointCloud2 ) -> None:
         
-        if SYNC_DEBUG:
-            print ("receive /raw_point_cloud, No.",self.cnt_get_raw_pcl)
-        self.cnt_get_raw_pcl += 1
+
+    def publish_filterd_pointcloud(self):
+        
+        if len(self.get_pcl_queue) == 0:
+            return 
+        
+        self.num_pcl_loam_is_processing += 1
+        
+        published_msg = self.get_pcl_queue.popleft()
 
         # test
         tmp_pointcloud = pcu.PointCloudXYZI()
-        tmp_pointcloud.load_from_pc2_pointcloud2(gotmsg)
+        tmp_pointcloud.load_from_pc2_pointcloud2(published_msg)
 
-        # get_filter
-        mask = self.agent.get_mask(tmp_pointcloud)
-        #print (mask)
-        binary_mask = [ 0 if c < MASK_THRESHOLD else 1 for c in mask[0] ]
-        #print (len(mask),mask,binary_mask)
-        
-        # filtering
-        tmp_pointcloud.filter_pointcloud_by_evation_angle(binary_mask)
+        if POINTNET_DQN_POINTNET_AND_LSTM:
+            # get_filter
+            mask = self.agent.get_mask(tmp_pointcloud)
+            #print (mask)
+                
+            # filtering
+            tmp_pointcloud.filter_pointcloud_by_evation_angle(mask)
 
         if FILTERING_DEBUG:
             x = np.zeros( tmp_pointcloud.get_point_num() )
@@ -95,7 +99,7 @@ class KittiFilter:
             plt.scatter(x,y)
             plt.savefig("onseeeeeeeeeeee.png")
             plt.show()
-        
+            
         #max_ring = float("-inf")
         #min_ring = float("inf")
         #for p in tmp_pointcloud.points:
@@ -104,34 +108,34 @@ class KittiFilter:
         #    min_ring = min(min_ring , r)
         #print (min_ring,max_ring)
 
-        gotmsg = tmp_pointcloud.get_converted_pointcloud_to_pc2_pointcloud2()
+        filtered_published_msg = tmp_pointcloud.get_converted_pointcloud_to_pc2_pointcloud2()
+
+        time.sleep(PUBLISH_WAIT)
+        self.pub_filterd_pcl.publish(filtered_published_msg)
+            
+        if SYNC_DEBUG:
+            #print (mask)
+            print ("publish filtered_pcl(/velodyne_cloud), No.",self.cnt_published_filtered_pcl , "mask=" , mask )
+        self.cnt_published_filtered_pcl += 1
+
+
+    def callback_raw_pcl( self , gotmsg : pc2.PointCloud2 ) -> None:
+        
+        if SYNC_DEBUG:
+            print ("receive /raw_point_cloud, No.",self.cnt_get_raw_pcl)
+        self.cnt_get_raw_pcl += 1
 
         self.get_pcl_queue.append(gotmsg)
 
-        if self.num_pcl_loam_is_processing < self.lim_pcl_loam_is_processing and self.get_pcl_queue:
-            time.sleep(PUBLISH_WAIT)
-            self.pub_filterd_pcl.publish(self.get_pcl_queue.popleft())
-            self.num_pcl_loam_is_processing += 1
-            
-            if SYNC_DEBUG:
-                print ("publish filtered_pcl(/velodyne_cloud), No.",self.cnt_published_filtered_pcl)
-            self.cnt_published_filtered_pcl += 1
+        if self.num_pcl_loam_is_processing == 0 and self.get_pcl_queue :
+            self.publish_filterd_pointcloud()
+           
 
     def callback_integrated_to_init( self , data: Odometry ) -> None:
         
         if SYNC_DEBUG:
             print ("receive result, No.",self.cnt_get_result)
         self.cnt_get_result += 1
-
-        self.num_pcl_loam_is_processing -= 1
-        if self.num_pcl_loam_is_processing < self.lim_pcl_loam_is_processing and self.get_pcl_queue:
-            time.sleep(PUBLISH_WAIT)
-            self.pub_filterd_pcl.publish(self.get_pcl_queue.popleft())
-            self.num_pcl_loam_is_processing += 1
-
-            if SYNC_DEBUG:
-                print ("publish filtered_pcl(/velodyne_cloud), No.",self.cnt_published_filtered_pcl)
-            self.cnt_published_filtered_pcl += 1
 
         #self.poses_result.append(data)
         self.mIntegratedTransforms.append(
@@ -174,10 +178,32 @@ class KittiFilter:
                 avr_trans_error += e.error_trans
             avr_rot_error /= len(odometry_errors)
             avr_trans_error /= len(odometry_errors)
+        
+            # train DQN
+            if POINTNET_DQN_POINTNET_AND_LSTM:
+                
+                # get_reward
+                reward = self.agent.calc_reward(avr_rot_error,avr_trans_error)
+                
+                if ERROR_DEBUG:
+                    print ("CALCERROR:",avr_rot_error , ":" , avr_trans_error , " reward=", reward)
 
-            if ERROR_DEBUG:
-                print ("CALCERROR:",avr_rot_error , ":" , avr_trans_error)
-            
+                # update
+                self.agent.get_reward(reward)
+        
+        else:
+
+            if POINTNET_DQN_POINTNET_AND_LSTM:
+                reward = 0
+                self.agent.get_reward(reward)
+                if ERROR_DEBUG:
+                    print ("Can't Calc Error : reward = 0")
+
+        self.num_pcl_loam_is_processing -= 1
+        # publish next
+        if self.num_pcl_loam_is_processing == 0 and self.get_pcl_queue:
+            self.publish_filterd_pointcloud()
+
     def compute_sequence_error_now(self):
 
         step_size = 10

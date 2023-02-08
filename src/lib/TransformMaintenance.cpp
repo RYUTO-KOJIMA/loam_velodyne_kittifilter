@@ -50,6 +50,13 @@ TransformMaintenance::TransformMaintenance()
 bool TransformMaintenance::setup(
     ros::NodeHandle &node, ros::NodeHandle &privateNode)
 {
+    
+    // added by kojima
+    // initalize counters
+    this->_cntSubLaserOdometry = 0;
+    this->_cntSubOdomAftMapped = 0;
+    this->_cntPubLaserOdometry = 0;
+    
     // Advertise integrated laser odometry topic
     this->_pubLaserOdometry2 = node.advertise<nav_msgs::Odometry>(
         "/integrated_to_init", 5);
@@ -68,6 +75,27 @@ bool TransformMaintenance::setup(
 void TransformMaintenance::laserOdometryHandler(
     const nav_msgs::Odometry::ConstPtr& laserOdometry)
 {
+    // added by kojima
+    // incremant counter
+    this->_cntSubLaserOdometry += 1;
+    
+    // push laserOdometry
+    this->_queueLaserOdometry.push_back(laserOdometry);
+
+    // process odometry
+    while ( (!this->_queueLaserOdometry.empty()) &&
+        (this->_cntPubLaserOdometry < (this->_cntSubOdomAftMapped+1)*2 )){
+        this->ProcessAndPublishOdometry(this->_queueLaserOdometry.front());
+        this->_queueLaserOdometry.pop_front();
+    }
+
+}
+
+void TransformMaintenance::ProcessAndPublishOdometry(
+    const nav_msgs::Odometry::ConstPtr& laserOdometry)
+{
+
+    // original part of laserOdometryHandler
     double roll;
     double pitch;
     double yaw;
@@ -106,11 +134,19 @@ void TransformMaintenance::laserOdometryHandler(
         tf::Vector3(this->transformMapped()[3], this->transformMapped()[4],
                     this->transformMapped()[5]));
     this->_tfBroadcaster2.sendTransform(this->_laserOdometryTrans2);
+
+    this->_cntPubLaserOdometry += 1;
 }
 
 void TransformMaintenance::odomAftMappedHandler(
     const nav_msgs::Odometry::ConstPtr& odomAftMapped)
 {
+
+    // added by kojima
+    // incremant counter
+    this->_cntSubOdomAftMapped += 1;
+
+    // original part
     double roll;
     double pitch;
     double yaw;
@@ -130,6 +166,14 @@ void TransformMaintenance::odomAftMappedHandler(
         odomAftMapped->twist.twist.linear.x,
         odomAftMapped->twist.twist.linear.y,
         odomAftMapped->twist.twist.linear.z);
+
+
+    // process odometry
+    while ( (!this->_queueLaserOdometry.empty()) &&
+        (this->_cntPubLaserOdometry < (this->_cntSubOdomAftMapped+1)*2 )){
+        this->ProcessAndPublishOdometry(this->_queueLaserOdometry.front());
+        this->_queueLaserOdometry.pop_front();
+    }
 }
 
 } // end namespace loam

@@ -41,6 +41,7 @@
 #include <tf/transform_broadcaster.h>
 
 #include "loam_velodyne/BasicTransformMaintenance.h"
+#include <list>
 
 namespace loam {
 
@@ -71,6 +72,9 @@ public:
     void odomAftMappedHandler(
         const nav_msgs::Odometry::ConstPtr& odomAftMapped);
 
+    void ProcessAndPublishOdometry(
+        const nav_msgs::Odometry::ConstPtr& laserOdometry);
+
 private:
     // Latest integrated laser odometry message
     nav_msgs::Odometry _laserOdometry2;
@@ -86,6 +90,16 @@ private:
     ros::Subscriber _subLaserOdometry;
     // Low frequency mapping odometry subscriber
     ros::Subscriber _subOdomAftMapped;
+
+    // added by kojima
+    // count subscribed laser odometry
+    int _cntSubLaserOdometry;
+    // count subscribed laser mapping
+    int _cntSubOdomAftMapped;
+    // count_published_odometry
+    int _cntPubLaserOdometry;
+    // queue to include odometry
+    std::list<nav_msgs::Odometry::ConstPtr> _queueLaserOdometry;
 };
 
 } // namespace loam

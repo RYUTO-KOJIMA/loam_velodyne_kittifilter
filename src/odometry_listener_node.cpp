@@ -179,14 +179,28 @@ bool OdometryListener::SaveResults(
     pt::ptree mappingResults;
     pt::ptree integratedResults;
 
-    for (const auto& transformOdom : this->mOdometryTransforms)
-        odometryResults.add("", transformOdom.ToString());
+    // changed by kojima
+    for (const auto& transformOdom : this->mOdometryTransforms){
+        //odometryResults.add("", transformOdom.ToString());
+        pt::ptree child;
+        child.put("" , transformOdom.ToString());
+        odometryResults.push_back(std::make_pair("",child));
+    }
 
-    for (const auto& transformMapped : this->mMappingTransforms)
-        mappingResults.add("", transformMapped.ToString());
+    for (const auto& transformMapped : this->mMappingTransforms){
+        //mappingResults.add("", transformMapped.ToString());
+        pt::ptree child;
+        child.put("" , transformMapped.ToString());
+        mappingResults.push_back(std::make_pair("",child));
+    }
 
-    for (const auto& transformIntegrated : this->mIntegratedTransforms)
-        integratedResults.add("", transformIntegrated.ToString());
+    for (const auto& transformIntegrated : this->mIntegratedTransforms){
+        //integratedResults.add("", transformIntegrated.ToString());
+        pt::ptree child;
+        child.put("" , transformIntegrated.ToString());
+        integratedResults.push_back(std::make_pair("",child));
+    }
+    // end
 
     if (!this->mOdometryTransforms.empty()) {
         jsonResults.put("Odometry.FrameId",
