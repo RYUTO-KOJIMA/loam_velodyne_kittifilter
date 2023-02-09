@@ -49,10 +49,11 @@ Transition = namedtuple('Transition',
 #                        ('pclA', 'longA' , 'shortA' , 'action', 'pclB', 'longB' , 'shortB' , 'reward'))
 
 REPLAY_BUFFER_SIZE_LIMIT = 10000
+SAMPLE_LIMIT = 1000
 
 OPTIMIZE_INTERVAL = 10
-SEQ_LENGTH = 8
-LEARN_BATCH_SIZE = 2
+SEQ_LENGTH = 16
+LEARN_BATCH_SIZE = 16
 MIN_PCL_LIMIT_OF_START_LERNING = 20
 TARGET_NET_UPDATE_INTERVAL = 10
 
@@ -62,6 +63,7 @@ EPS_END = 0.05
 EPS_DECAY = 4000
 
 LEARNING_DEBUG = True
+
 
 # Do not Use
 class ReplayMemory(object):
@@ -198,11 +200,22 @@ class AgentDQNPointNet(AgentDQN):
         #self.last_long_memory_c.append(self.policy_net.long_memory_c)
         #self.last_short_memory_h.append(self.policy_net.short_memory_h)
 
-    def convert_inputcloud_to_tensor(self,given_point_cloud : PointCloudXYZI):
+    def convert_inputcloud_to_tensor(self,given_point_cloud : PointCloudXYZI , sample_limit=float("inf")):
         # create Torch.tensor which contains both given_point_cloud and self.last_point_cloud
+        # and random samples
+
+        sample_pnum = min(sample_limit , given_point_cloud.get_point_num())
+        sample_idxs = [i for i in range(given_point_cloud.get_point_num())]
+        random.shuffle(sample_idxs)
         
+        #pos = torch.tensor(
+        #    [ [p.x,p.y,p.z] for p in given_point_cloud.points] 
+        #    , dtype=torch.float32 , device=device )
+        
+        pos_list = [ [given_point_cloud.points[i].x , given_point_cloud.points[i].y , given_point_cloud.points[i].z] for i in sample_idxs[:sample_pnum] ]
+
         pos = torch.tensor(
-            [ [p.x,p.y,p.z] for p in given_point_cloud.points] 
+            pos_list
             , dtype=torch.float32 , device=device )
 
         ret_data = Data( pos=pos )
@@ -211,7 +224,7 @@ class AgentDQNPointNet(AgentDQN):
 
     def get_mask(self, pointcloud : PointCloudXYZI):
 
-        converted_pointcloud = self.convert_inputcloud_to_tensor(pointcloud)
+        converted_pointcloud = self.convert_inputcloud_to_tensor(pointcloud , SAMPLE_LIMIT)
 
         batch_pcl_indices = torch.zeros( converted_pointcloud.pos.shape[0] ,dtype=torch.long , device=device)
         wrapping_batch = MyBatch( batch_pcl_indices , converted_pointcloud.pos )
@@ -227,11 +240,11 @@ class AgentDQNPointNet(AgentDQN):
             q_data = self.policy_net(wrapping_batch)
             q_max_idx = torch.argmax(q_data[0])
 
-            if random.random() > eps_threshold:
+            if random.random() > eps_threshold and q_max_idx != 0:
                 binary_mask = [ 1 if (2**i) & q_max_idx else 0 for i in range( self.ring_part_num ) ]
                 self.replay_buffer.push_mask(q_max_idx)
             else:
-                random_mask = random.randint(0,self.class_num-1)
+                random_mask = random.randint(1,self.class_num-1)
                 binary_mask = [ 1 if (2**i) & random_mask else 0 for i in range( self.ring_part_num ) ]
                 self.replay_buffer.push_mask(random_mask)
 
