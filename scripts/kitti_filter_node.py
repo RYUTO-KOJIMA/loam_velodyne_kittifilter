@@ -31,8 +31,13 @@ RING_PART_NUM = 10
 
 POINTNET_DQN_POINTNET_AND_LSTM = True
 
+SAVE_DATA_PATH = "/home/kojima/saved_data"
+
 lengths = [ 100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0]
 # lengths = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0]
+
+import torch
+torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
 class KittiFilter:
 
