@@ -21,6 +21,8 @@ import point_cloud_util as pcu
 import matplotlib.pyplot as plt
 import learning_util
 
+from data_util import fileprint
+
 DATASET_DIR = ""
 
 SYNC_DEBUG = True
@@ -31,13 +33,12 @@ RING_PART_NUM = 10
 
 POINTNET_DQN_POINTNET_AND_LSTM = True
 
-SAVE_DATA_PATH = "/home/kojima/saved_data"
+fileprint("A","RING_PART_NUM",RING_PART_NUM)
+
 
 lengths = [ 100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0]
 # lengths = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0]
 
-import torch
-torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
 class KittiFilter:
 
@@ -121,6 +122,8 @@ class KittiFilter:
         if SYNC_DEBUG:
             #print (mask)
             print ("publish filtered_pcl(/velodyne_cloud), No.",self.cnt_published_filtered_pcl , "mask=" , mask )
+
+        fileprint ("C",self.cnt_published_filtered_pcl,"th_mask","".join(map(str,mask)))
         self.cnt_published_filtered_pcl += 1
 
 
@@ -179,8 +182,8 @@ class KittiFilter:
             avr_rot_error = 0
             avr_trans_error = 0
             for e in odometry_errors:
-                avr_rot_error += e.error_rot
-                avr_trans_error += e.error_trans
+                avr_rot_error += abs(e.error_rot)
+                avr_trans_error += abs(e.error_trans)
             avr_rot_error /= len(odometry_errors)
             avr_trans_error /= len(odometry_errors)
         
@@ -192,6 +195,9 @@ class KittiFilter:
                 
                 if ERROR_DEBUG:
                     print ("CALCERROR:",avr_rot_error , ":" , avr_trans_error , " reward=", reward)
+                fileprint("D",self.cnt_published_filtered_pcl-1,"th_avr_rot_error",avr_rot_error)
+                fileprint("E",self.cnt_published_filtered_pcl-1,"th_avr_trans_error",avr_trans_error)
+                fileprint("F",self.cnt_published_filtered_pcl-1,"th_reward",reward)
 
                 # update
                 self.agent.get_reward(reward)
@@ -203,6 +209,10 @@ class KittiFilter:
                 self.agent.get_reward(reward)
                 if ERROR_DEBUG:
                     print ("Can't Calc Error : reward = 0")
+
+                fileprint("D",self.cnt_published_filtered_pcl-1,"th_avr_rot_error",None)
+                fileprint("E",self.cnt_published_filtered_pcl-1,"th_avr_trans_error",None)
+                fileprint("F",self.cnt_published_filtered_pcl-1,"th_reward",0)
 
         self.num_pcl_loam_is_processing -= 1
         # publish next

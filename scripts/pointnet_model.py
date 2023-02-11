@@ -3,6 +3,8 @@ import torch
 from torch_geometric.nn import global_max_pool
 import torch.nn as nn
 
+from data_util import fileprint
+
 CLASS_NUM = 5
 BATCH_SIZE = 1 #change later
 

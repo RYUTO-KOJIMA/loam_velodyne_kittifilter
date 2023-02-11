@@ -22,8 +22,12 @@ from point_cloud_util import PointCloudXYZI
 
 from abc import ABCMeta, abstractmethod
 
+import torch_geometric
 from torch_geometric.data import Data,Batch
 from collections import deque
+
+from data_util import fileprint
+
 
 #GAMMA = 0.999
 #EPS_START = 0.9
@@ -38,8 +42,14 @@ if is_ipython:
 plt.ion()
 
 # if gpu is to be used
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+    torch.set_default_tensor_type('torch.cuda.FloatTensor')
+    fileprint("A","device","cuda")
+else:
+    device = torch.device("cpu")
+    fileprint("A","device","cpu")
 
 # CONSTS
 Transition = namedtuple('Transition',
@@ -64,6 +74,17 @@ EPS_DECAY = 4000
 
 LEARNING_DEBUG = True
 
+fileprint("A","REPLAY_BUFFER_SIZE_LIMIT",REPLAY_BUFFER_SIZE_LIMIT)
+fileprint("A","SAMPLE_LIMIT",SAMPLE_LIMIT)
+fileprint("A","OPTIMIZE_INTERVAL",OPTIMIZE_INTERVAL)
+fileprint("A","SEQ_LENGTH",SEQ_LENGTH)
+fileprint("A","LEARN_BATCH_SIZE",LEARN_BATCH_SIZE)
+fileprint("A","MIN_PCL_LIMIT_OF_START_LERNING",MIN_PCL_LIMIT_OF_START_LERNING)
+fileprint("A","TARGET_NET_UPDATE_INTERVAL",TARGET_NET_UPDATE_INTERVAL)
+fileprint("A","GAMMA",GAMMA)
+fileprint("A","EPS_START",EPS_START)
+fileprint("A","EPS_END",EPS_END)
+fileprint("A","EPS_DECAY",EPS_DECAY)
 
 # Do not Use
 class ReplayMemory(object):
@@ -319,9 +340,9 @@ class AgentDQNPointNet(AgentDQN):
         y = sampled_rewards + GAMMA * q_max_target
 
         # select q value based on actions
-        print (sampled_masks.size() , q_data_policy.size() , "sm:qdp")
+        # print (sampled_masks.size() , q_data_policy.size() , "sm:qdp")
         q_policy_based_on_action = torch.gather( input=q_data_policy , dim=1 , index=sampled_masks ).squeeze()
-        print (y.size() , q_policy_based_on_action.size() , "y:qpdoa")
+        # print (y.size() , q_policy_based_on_action.size() , "y:qpdoa")
         criterion = nn.SmoothL1Loss()
         loss = criterion( y , q_policy_based_on_action )
         print ("loss calc end")
@@ -332,6 +353,7 @@ class AgentDQNPointNet(AgentDQN):
 
         if LEARNING_DEBUG:
             print (self.num_processed_pcl , "th avarage training loss = " , torch.mean(loss).item() )
+        fileprint("B",self.num_processed_pcl , "th_avarage_training_loss" , torch.mean(loss).item() )
 
         for param in self.policy_net.parameters():
             param.grad.data.clamp_(-1, 1)

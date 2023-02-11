@@ -11,6 +11,8 @@ import bisect
 from torch_geometric.data import Data
 import torch
 
+from data_util import fileprint
+
 # resolution of HDL 64E
 # vertical   = 26.8 degree
 # horizontal = 0.09 degree 
