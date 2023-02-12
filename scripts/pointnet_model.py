@@ -93,7 +93,7 @@ class PointNet_LSTM(nn.Module):
         )
 
         #self.lstm1 = nn.LSTM(input_size = 1024 , hidden_size = 1024 , num_layers = 5)
-        self.lstm1 = nn.LSTMCell(input_size=1024 , hidden_size=64)
+        self.lstm1 = nn.LSTMCell(input_size=1024 , hidden_size=1024)
         self.hc_tuple_of_lstm1 = None
 
         #self.long_memory_c   = torch.randn( self.lstm1.num_layers , BATCH_SIZE , self.lstm1.input_size ) * 0.01
@@ -106,7 +106,7 @@ class PointNet_LSTM(nn.Module):
 
 
         self.mlp3 = nn.Sequential(
-            nn.Linear(64, 512), nn.BatchNorm1d(512), nn.ReLU(), nn.Dropout(p=0.3),
+            nn.Linear(1024, 512), nn.BatchNorm1d(512), nn.ReLU(), nn.Dropout(p=0.3),
             nn.Linear(512, 256), nn.BatchNorm1d(256), nn.ReLU(), nn.Dropout(p=0.3),
             nn.Linear(256, class_num)
         )

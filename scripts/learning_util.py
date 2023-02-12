@@ -58,13 +58,13 @@ Transition = namedtuple('Transition',
 #Transition2 = namedtuple('Transition2',
 #                        ('pclA', 'longA' , 'shortA' , 'action', 'pclB', 'longB' , 'shortB' , 'reward'))
 
-REPLAY_BUFFER_SIZE_LIMIT = 10000
+REPLAY_BUFFER_SIZE_LIMIT = 1000000
 SAMPLE_LIMIT = 1000
 
 OPTIMIZE_INTERVAL = 10
 SEQ_LENGTH = 16
 LEARN_BATCH_SIZE = 16
-MIN_PCL_LIMIT_OF_START_LERNING = 20
+MIN_PCL_LIMIT_OF_START_LERNING = 200
 TARGET_NET_UPDATE_INTERVAL = 10
 
 GAMMA = 0.999

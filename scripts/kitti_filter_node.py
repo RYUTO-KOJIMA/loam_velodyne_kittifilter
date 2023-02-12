@@ -22,6 +22,11 @@ import matplotlib.pyplot as plt
 import learning_util
 
 from data_util import fileprint
+from data_util import SAVE_DATA_PATH
+
+import os
+import torch
+import subprocess
 
 DATASET_DIR = ""
 
@@ -32,6 +37,10 @@ PUBLISH_WAIT = 0.01
 RING_PART_NUM = 10
 
 POINTNET_DQN_POINTNET_AND_LSTM = True
+
+EXPORT_MODEL_FILENAME = "model_weight.pth"
+ODOMETRY_FILENAME = "odometry.json"
+EVALUATED_DATA_PREFIX = "gen"
 
 fileprint("A","RING_PART_NUM",RING_PART_NUM)
 
@@ -53,10 +62,11 @@ class KittiFilter:
         self.dists_result = [] #result distances
 
         dataset_dir = rospy.get_param("/kittiFilter/dataset_dir")
-        sequence = rospy.get_param("/kittiFilter/sequence")
-        self.dataset = pykitti.odometry(dataset_dir,str(sequence).zfill(2))
+        self.sequence_id = rospy.get_param("/kittiFilter/sequence")
+        self.dataset = pykitti.odometry(dataset_dir,str(self.sequence_id).zfill(2))
         self.poses_gt = self.dataset.poses #grandtruth poses
         self.dists_gt = ecu.trajectory_distances(self.poses_gt)
+        self.seq_length = 10 #len(self.poses_gt)
 
         # After receiving the results, pass new data to loam
         self.is_sync = False if str(rospy.get_param("/kittiFilter/sync")) in ("false","False","FALSE") else True
@@ -73,6 +83,10 @@ class KittiFilter:
         self.cnt_get_raw_pcl = 0
         self.cnt_published_filtered_pcl = 0
         self.cnt_get_result = 0
+
+        # print data
+        fileprint("A","SEQUENCE_ID",self.sequence_id)
+        fileprint("A","SEQ_LENGTH",self.seq_length)
         
 
     def publish_filterd_pointcloud(self):
@@ -218,6 +232,39 @@ class KittiFilter:
         # publish next
         if self.num_pcl_loam_is_processing == 0 and self.get_pcl_queue:
             self.publish_filterd_pointcloud()
+        
+        if self.cnt_get_result == self.seq_length:
+            print ("SEQUENCE COMPLETE")
+            
+            model_path = os.path.join( SAVE_DATA_PATH , EXPORT_MODEL_FILENAME )
+            torch.save(self.agent.policy_net.state_dict(), model_path)
+            print ("SAVED State-dict as", model_path )
+
+
+            odometry_path = os.path.join( SAVE_DATA_PATH , ODOMETRY_FILENAME )
+            command = "rosservice call /save_odometry " + odometry_path
+            if os.system(command) == 0:
+                print ("SAVED odometry as",odometry_path)
+            else:
+                print ("Odometry save failed")
+            
+
+            command = " ".join( [
+                "python ~/catkin_ws/src/loam_velodyne/scripts/evaluate_kitti_odometry.py",
+                " --dataset_dir /home/kojima/kitti-dataset/dataset",
+                " --sequence " + str(self.sequence_id).zfill(2),
+                " --odometry " + odometry_path,
+                " --topic Integrated",
+                " --out_dir " + SAVE_DATA_PATH,
+                " --prefix " + EVALUATED_DATA_PREFIX
+            ] )
+
+            if os.system(command) == 0:
+                print ("Genarated evaluated data" )
+            else:
+                print ("evaluated data generation faild")
+
+
 
     def compute_sequence_error_now(self):
 
