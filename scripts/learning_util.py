@@ -73,7 +73,12 @@ EPS_END = 0.05
 EPS_DECAY = 4000
 
 LEARNING_DEBUG = True
+IS_VANILLA_LOAM = False # is vanilla loam
 
+REWARD_ROT_RATIO = 2000
+REWARD_TRANS_RATIO = 15
+
+fileprint("A","IS_VANILLA_LOAM",IS_VANILLA_LOAM)
 fileprint("A","REPLAY_BUFFER_SIZE_LIMIT",REPLAY_BUFFER_SIZE_LIMIT)
 fileprint("A","SAMPLE_LIMIT",SAMPLE_LIMIT)
 fileprint("A","OPTIMIZE_INTERVAL",OPTIMIZE_INTERVAL)
@@ -85,6 +90,8 @@ fileprint("A","GAMMA",GAMMA)
 fileprint("A","EPS_START",EPS_START)
 fileprint("A","EPS_END",EPS_END)
 fileprint("A","EPS_DECAY",EPS_DECAY)
+fileprint("A","REWARD_ROT_RATIO",REWARD_ROT_RATIO)
+fileprint("A","REWARD_TRANS_RATIO",REWARD_TRANS_RATIO)
 
 # Do not Use
 class ReplayMemory(object):
@@ -261,7 +268,12 @@ class AgentDQNPointNet(AgentDQN):
             q_data = self.policy_net(wrapping_batch)
             q_max_idx = torch.argmax(q_data[0])
 
-            if random.random() > eps_threshold and q_max_idx != 0:
+            if IS_VANILLA_LOAM:
+                mask = self.class_num-1
+                binary_mask = [ 1 if (2**i) & mask else 0 for i in range( self.ring_part_num ) ]
+                self.replay_buffer.push_mask(mask)
+
+            elif random.random() > eps_threshold and q_max_idx != 0:
                 binary_mask = [ 1 if (2**i) & q_max_idx else 0 for i in range( self.ring_part_num ) ]
                 self.replay_buffer.push_mask(q_max_idx)
             else:
@@ -419,7 +431,7 @@ class AgentDQNPointNet(AgentDQN):
         #        self.optimize_model()
         #self.last_reward = reward
 
-    def calc_reward(self , rot_error , trans_error):
+    def calc_reward_old_v1(self , rot_error , trans_error):
         last_mask = list(map(int,format(self.replay_buffer.get_last_mask(),"b")))
         reduction_ratio = sum(last_mask) / len(last_mask)
         rot_error_diff   = abs(rot_error - self.last_rot_error)
@@ -428,6 +440,23 @@ class AgentDQNPointNet(AgentDQN):
         self.last_rot_error = rot_error
         self.last_trans_error = trans_error
         return 1.0 / ( ( reduction_ratio * rot_error_diff * trans_error_diff ))
+    
+    def calc_reward(self , rot_error , trans_error):
+
+        mask_value = self.replay_buffer.get_last_mask()
+        mask_bin = [ 1 if (mask_value & 2**i) > 0 else 0  for i in range(self.ring_part_num)]
+        reduction_ratio = 1 - sum(mask_bin) / len(mask_bin)
+        rot_error_abs   = abs(rot_error)
+        trans_error_abs = abs(trans_error)
+
+        reward = reduction_ratio - REWARD_ROT_RATIO * rot_error_abs - REWARD_TRANS_RATIO * trans_error_abs
+
+
+        self.last_rot_error = rot_error
+        self.last_trans_error = trans_error
+
+        return reward
+    
 
 # my batch type (i can't understand torch_geometirc.data.Batch)
 class MyBatch():
