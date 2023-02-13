@@ -449,8 +449,8 @@ class AgentDQNPointNet(AgentDQN):
         rot_error_abs   = abs(rot_error)
         trans_error_abs = abs(trans_error)
 
+        print ("Reduction ratio:" , reduction_ratio)
         reward = reduction_ratio - REWARD_ROT_RATIO * rot_error_abs - REWARD_TRANS_RATIO * trans_error_abs
-
 
         self.last_rot_error = rot_error
         self.last_trans_error = trans_error

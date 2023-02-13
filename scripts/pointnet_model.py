@@ -2,8 +2,11 @@
 import torch
 from torch_geometric.nn import global_max_pool
 import torch.nn as nn
+from torch_geometric.nn import GCNConv
+import torch.nn.functional as F
 
 from data_util import fileprint
+
 
 CLASS_NUM = 5
 BATCH_SIZE = 1 #change later
@@ -75,8 +78,30 @@ class FeatureTNet(nn.Module):
         return x
 
 
+class GraphConvLayer(nn.Module):
+    
+    def __init__(self, class_num=1024):
+        super(GraphConvLayer,self).__init__()
+        self.conv1 = GCNConv(class_num,class_num)
+        self.conv2 = GCNConv(class_num,class_num)
+
+        pow_of_2 = set( [2**i for i in range(class_num.bit_length())] )
+        edge = [ [] , [] ]
+        for i in range(class_num):
+            for j in range(class_num):
+                if i^j in pow_of_2:
+                    edge[0].append(i)
+                    edge[1].append(j)
+        self.edge_index = torch.tensor( edge , dtype=torch.long )
+
+    def forward(self,x):
+        x = self.conv1(x , self.edge_index)
+        x = self.conv2(x , self.edge_index)
+        return x
+
+
 class PointNet_LSTM(nn.Module):
-    def __init__(self,class_num=5,point_dimention=3):
+    def __init__(self,class_num=1024,point_dimention=3):
         super(PointNet_LSTM, self).__init__()
 
         self.point_dimention = point_dimention
@@ -110,6 +135,8 @@ class PointNet_LSTM(nn.Module):
             nn.Linear(512, 256), nn.BatchNorm1d(256), nn.ReLU(), nn.Dropout(p=0.3),
             nn.Linear(256, class_num)
         )
+
+        self.gconv = GraphConvLayer(class_num=class_num)
 
     def reset_hidden_state_zero(self):
         self.hc_tuple_of_lstm1 = None
@@ -146,6 +173,8 @@ class PointNet_LSTM(nn.Module):
         self.hc_tuple_of_lstm1 = self.lstm1( x , self.hc_tuple_of_lstm1 )
 
         x = self.mlp3(self.hc_tuple_of_lstm1[0])
+
+        x = self.gconv(x)
         
         return x
         #return x,None,None # self.long_memory_c , self.short_memory_h
