@@ -66,7 +66,7 @@ class KittiFilter:
         self.dataset = pykitti.odometry(dataset_dir,str(self.sequence_id).zfill(2))
         self.poses_gt = self.dataset.poses #grandtruth poses
         self.dists_gt = ecu.trajectory_distances(self.poses_gt)
-        self.seq_length = 10 #len(self.poses_gt)
+        self.seq_length = len(self.poses_gt)
 
         # After receiving the results, pass new data to loam
         self.is_sync = False if str(rospy.get_param("/kittiFilter/sync")) in ("false","False","FALSE") else True
