@@ -80,10 +80,10 @@ class FeatureTNet(nn.Module):
 
 class GraphConvLayer(nn.Module):
     
-    def __init__(self, class_num=1024):
+    def __init__(self, class_num=1):
         super(GraphConvLayer,self).__init__()
-        self.conv1 = GCNConv(class_num,class_num)
-        self.conv2 = GCNConv(class_num,class_num)
+        self.conv1 = GCNConv(1,64)
+        self.conv2 = GCNConv(64,1)
 
     def forward(self,x,edge_index):
         x = self.conv1(x , edge_index)
@@ -127,7 +127,7 @@ class PointNet_LSTM(nn.Module):
             nn.Linear(256, class_num)
         )
 
-        self.gconv = GraphConvLayer(class_num=class_num)
+        self.gconv = GraphConvLayer()
         self.class_num = class_num
 
     def reset_hidden_state_zero(self):
