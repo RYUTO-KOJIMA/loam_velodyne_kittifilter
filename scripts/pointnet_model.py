@@ -85,18 +85,9 @@ class GraphConvLayer(nn.Module):
         self.conv1 = GCNConv(class_num,class_num)
         self.conv2 = GCNConv(class_num,class_num)
 
-        pow_of_2 = set( [2**i for i in range(class_num.bit_length())] )
-        edge = [ [] , [] ]
-        for i in range(class_num):
-            for j in range(class_num):
-                if i^j in pow_of_2:
-                    edge[0].append(i)
-                    edge[1].append(j)
-        self.edge_index = torch.tensor( edge , dtype=torch.long )
-
-    def forward(self,x):
-        x = self.conv1(x , self.edge_index)
-        x = self.conv2(x , self.edge_index)
+    def forward(self,x,edge_index):
+        x = self.conv1(x , edge_index)
+        x = self.conv2(x , edge_index)
         return x
 
 
@@ -137,6 +128,7 @@ class PointNet_LSTM(nn.Module):
         )
 
         self.gconv = GraphConvLayer(class_num=class_num)
+        self.class_num = class_num
 
     def reset_hidden_state_zero(self):
         self.hc_tuple_of_lstm1 = None
@@ -174,7 +166,23 @@ class PointNet_LSTM(nn.Module):
 
         x = self.mlp3(self.hc_tuple_of_lstm1[0])
 
-        x = self.gconv(x)
+        batch_size = len(x)
+        x = torch.reshape(x , (1,-1))
+        x = torch.transpose(x,0,1)
+
+        pow_of_2 = set( [2**i for i in range(self.class_num.bit_length())] )
+        edge = [ [] , [] ]
+        for i in range(len(x)):
+            for bit in range(self.class_num.bit_length()-1):
+                j = i ^ (2**bit)
+                edge[0].append(i)
+                edge[1].append(j)
+        edge_index = torch.tensor( edge , dtype=torch.long )
+
+        x = self.gconv(x , edge_index)
+
+        x = torch.transpose(x,0,1)
+        x = torch.reshape(x , (batch_size,-1))
         
         return x
         #return x,None,None # self.long_memory_c , self.short_memory_h
