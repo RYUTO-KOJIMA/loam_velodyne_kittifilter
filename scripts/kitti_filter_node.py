@@ -45,8 +45,8 @@ EVALUATED_DATA_PREFIX = "gen"
 fileprint("A","RING_PART_NUM",RING_PART_NUM)
 
 
-lengths = [ 100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0]
-# lengths = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0]
+lengths = [ 100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0 ]
+lengths2 = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 80.0, 100.0]
 
 
 class KittiFilter:
@@ -188,7 +188,8 @@ class KittiFilter:
         self.poses_result.append(lo_trans)
 
         # get error of now frame
-        odometry_errors = self.compute_sequence_error_now()
+        odometry_errors_long  = self.compute_sequence_error_now(lengths)
+        odometry_errors       = self.compute_sequence_error_now(lengths2)
 
         #calc average rot & trans error
 
@@ -208,9 +209,9 @@ class KittiFilter:
                 reward = self.agent.calc_reward(avr_rot_error,avr_trans_error)
                 
                 if ERROR_DEBUG:
-                    print ("CALCERROR:",avr_rot_error , ":" , avr_trans_error , " reward=", reward)
-                fileprint("D",self.cnt_published_filtered_pcl-1,"th_avr_rot_error",avr_rot_error)
-                fileprint("E",self.cnt_published_filtered_pcl-1,"th_avr_trans_error",avr_trans_error)
+                    print ("CALCERROR(short):",avr_rot_error , ":" , avr_trans_error , " reward=", reward)
+                fileprint("G",self.cnt_published_filtered_pcl-1,"th_avr_rot_error_short",avr_rot_error)
+                fileprint("H",self.cnt_published_filtered_pcl-1,"th_avr_trans_error_short",avr_trans_error)
                 fileprint("F",self.cnt_published_filtered_pcl-1,"th_reward",reward)
 
                 # update
@@ -224,9 +225,27 @@ class KittiFilter:
                 if ERROR_DEBUG:
                     print ("Can't Calc Error : reward = 0")
 
-                fileprint("D",self.cnt_published_filtered_pcl-1,"th_avr_rot_error",None)
-                fileprint("E",self.cnt_published_filtered_pcl-1,"th_avr_trans_error",None)
+                fileprint("G",self.cnt_published_filtered_pcl-1,"th_avr_rot_error_short",None)
+                fileprint("H",self.cnt_published_filtered_pcl-1,"th_avr_trans_error_short",None)
                 fileprint("F",self.cnt_published_filtered_pcl-1,"th_reward",0)
+
+        # original kitti-evaluation
+        if (len(odometry_errors_long) > 0):
+            avr_rot_error_long = 0
+            avr_trans_error_long = 0
+            for e in odometry_errors_long:
+                avr_rot_error_long += abs(e.error_rot)
+                avr_trans_error_long += abs(e.error_trans)
+            avr_rot_error_long   /= len(odometry_errors_long)
+            avr_trans_error_long /= len(odometry_errors_long)
+            fileprint("D",self.cnt_published_filtered_pcl-1,"th_avr_rot_error_long",avr_rot_error_long)
+            fileprint("E",self.cnt_published_filtered_pcl-1,"th_avr_trans_error_long",avr_trans_error_long)
+        else:
+            fileprint("D",self.cnt_published_filtered_pcl-1,"th_avr_rot_error_long",None)
+            fileprint("E",self.cnt_published_filtered_pcl-1,"th_avr_trans_error_long",None)
+
+
+        
 
         self.num_pcl_loam_is_processing -= 1
         # publish next
@@ -266,7 +285,7 @@ class KittiFilter:
 
 
 
-    def compute_sequence_error_now(self):
+    def compute_sequence_error_now(self , length_lis = lengths):
 
         step_size = 10
 
@@ -274,7 +293,7 @@ class KittiFilter:
 
         errors = []
 
-        for length in lengths:
+        for length in length_lis:
 
             search_frame = None
             length_sum = 0
