@@ -207,6 +207,10 @@ class AgentDQNPointNet(AgentDQN):
         #self.last_point_cloud = deque(maxlen=2)
         self.last_rot_error = 0
         self.last_trans_error = 0
+
+        self.past_rot_errors = []
+        self.past_trans_errors = []
+
         #self.last_mask = deque(maxlen=2)
         #self.last_long_memory_c  = deque(maxlen=2)
         #self.last_short_memory_h = deque(maxlen=2)
@@ -441,7 +445,7 @@ class AgentDQNPointNet(AgentDQN):
         self.last_trans_error = trans_error
         return 1.0 / ( ( reduction_ratio * rot_error_diff * trans_error_diff ))
     
-    def calc_reward(self , rot_error , trans_error):
+    def calc_reward_old_v2(self , rot_error , trans_error):
 
         mask_value = self.replay_buffer.get_last_mask()
         mask_bin = [ 1 if (mask_value & 2**i) > 0 else 0  for i in range(self.ring_part_num)]
@@ -456,6 +460,28 @@ class AgentDQNPointNet(AgentDQN):
         self.last_rot_error = rot_error
         self.last_trans_error = trans_error
 
+        return reward
+    
+    def calc_reward(self , rot_error , trans_error):
+        
+        LAST_LOOK_MAX = 100
+        OK_LIMIT = 1.1
+
+        look_num = min(LAST_LOOK_MAX , len(self.past_rot_errors))
+        okcnt = 0
+        for i in range(look_num):
+            if abs(self.past_rot_errors[-1-i]) * OK_LIMIT > abs(rot_error):
+                okcnt += 1
+            if abs(self.past_trans_errors[-1-i]) * OK_LIMIT > abs(trans_error):
+                okcnt += 1
+        
+        reward = okcnt / (2 * look_num)
+
+        self.past_rot_errors.append(rot_error)
+        self.past_trans_errors.append(trans_error)
+
+        self.last_rot_error = rot_error
+        self.last_trans_error = trans_error
         return reward
     
 
