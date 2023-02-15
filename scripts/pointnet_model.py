@@ -8,8 +8,9 @@ import torch.nn.functional as F
 from data_util import fileprint
 
 
-CLASS_NUM = 5
-BATCH_SIZE = 1 #change later
+#CLASS_NUM = 5
+#BATCH_SIZE = 1 #change later
+LSTM_LAYERS = 5
 
 class SymmFunction(nn.Module):
     def __init__(self,point_dimention=3):
@@ -109,8 +110,11 @@ class PointNet_LSTM(nn.Module):
         )
 
         #self.lstm1 = nn.LSTM(input_size = 1024 , hidden_size = 1024 , num_layers = 5)
-        self.lstm1 = nn.LSTMCell(input_size=1024 , hidden_size=1024)
-        self.hc_tuple_of_lstm1 = None
+
+        self.lstm_layers = [nn.LSTMCell(input_size=1024 , hidden_size=1024) for i in range(LSTM_LAYERS)]
+        self.hc_tuple_of_lstm = [None] * LSTM_LAYERS
+        #self.lstm1 = nn.LSTMCell(input_size=1024 , hidden_size=1024)
+        #self.hc_tuple_of_lstm1 = None
 
         #self.long_memory_c   = torch.randn( self.lstm1.num_layers , BATCH_SIZE , self.lstm1.input_size ) * 0.01
         #self.short_memory_h  = torch.randn( self.lstm1.num_layers , BATCH_SIZE , self.lstm1.input_size ) * 0.01
@@ -131,13 +135,13 @@ class PointNet_LSTM(nn.Module):
         self.class_num = class_num
 
     def reset_hidden_state_zero(self):
-        self.hc_tuple_of_lstm1 = None
+        self.hc_tuple_of_lstm = [None] * LSTM_LAYERS
     
     def set_hidden_state(self, in_hidden_state):
-        self.hc_tuple_of_lstm1 = in_hidden_state
+        self.hc_tuple_of_lstm = in_hidden_state
 
     def get_now_hidden_state(self):
-        return self.hc_tuple_of_lstm1
+        return self.hc_tuple_of_lstm
         
     def forward(self, batch_data):
         x = batch_data.pos
@@ -160,11 +164,14 @@ class PointNet_LSTM(nn.Module):
         #x,(self.long_memory_c, self.short_memory_h) = self.lstm1( x , (self.long_memory_c,self.short_memory_h) )
 
         #print (self.hc_tuple_of_lstm1)
-        if self.hc_tuple_of_lstm1 != None:
-            self.hc_tuple_of_lstm1 = ( self.hc_tuple_of_lstm1[0].detach() , self.hc_tuple_of_lstm1[1].detach() )
-        self.hc_tuple_of_lstm1 = self.lstm1( x , self.hc_tuple_of_lstm1 )
 
-        x = self.mlp3(self.hc_tuple_of_lstm1[0])
+        for i in range(LSTM_LAYERS):
+            if self.hc_tuple_of_lstm[i] != None:
+                self.hc_tuple_of_lstm[i] = ( self.hc_tuple_of_lstm[i][0].detach() , self.hc_tuple_of_lstm[i][1].detach() )
+            self.hc_tuple_of_lstm[i] = self.lstm_layers[i]( x , self.hc_tuple_of_lstm[i] )
+            x = self.hc_tuple_of_lstm[i][0]
+
+        x = self.mlp3(x)
 
         batch_size = len(x)
         x = torch.reshape(x , (1,-1))
