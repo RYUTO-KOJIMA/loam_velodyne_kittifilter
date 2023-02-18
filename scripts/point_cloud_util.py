@@ -11,6 +11,14 @@ import bisect
 from torch_geometric.data import Data
 import torch
 
+import numpy as np
+import rospy
+import tf.transformations
+
+from scipy.spatial.transform import Rotation
+from geometry_msgs.msg import Point, Pose, Quaternion, Twist, Vector3
+from nav_msgs.msg import Odometry
+
 from data_util import fileprint
 
 # resolution of HDL 64E
@@ -129,3 +137,32 @@ def get_scanline_kitti_from_xyz( point ) -> int:
     ring = theta / HDL64E_V_RESOLUTION
     return ring
 
+
+# Using tf.transformations
+def transform_pcl0(cloud: np.ndarray, odom_msg: Odometry):
+    odom_pos: Point = odom_msg.pose.pose.position
+    odom_quat: Quaternion = odom_msg.pose.pose.orientation
+
+    # Get a rotation matrix and a translation vector
+    rot = tf.transformations.quaternion_matrix([
+        odom_quat.x, odom_quat.y, odom_quat.z, odom_quat.w])
+    rot = rot[:3, :3]
+    trans = np.array([odom_pos.x, odom_pos.y, odom_pos.z], dtype=np.float64)
+
+    cloud_transformed = cloud @ rot.T + trans
+    return cloud_transformed
+
+# Using SciPy
+def transform_pcl1(cloud: np.ndarray, odom_msg: Odometry):
+    odom_pos: Point = odom_msg.pose.pose.position
+    odom_quat: Quaternion = odom_msg.pose.pose.orientation
+
+    # Get a rotation matrix and a translation vector
+    rot = Rotation.from_quat([
+        odom_quat.x, odom_quat.y, odom_quat.z, odom_quat.w])
+    # Newer version of SciPy uses `as_matrix()` instead of `as_dcm()`
+    rot = rot.as_dcm()
+    trans = np.array([odom_pos.x, odom_pos.y, odom_pos.z], dtype=np.float64)
+
+    cloud_transformed = cloud @ rot.T + trans
+    return cloud_transformed

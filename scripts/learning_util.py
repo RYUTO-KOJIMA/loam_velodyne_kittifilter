@@ -25,6 +25,7 @@ from abc import ABCMeta, abstractmethod
 import torch_geometric
 from torch_geometric.data import Data,Batch
 from collections import deque
+from nav_msgs.msg import Odometry
 
 from data_util import fileprint
 
@@ -62,21 +63,26 @@ REPLAY_BUFFER_SIZE_LIMIT = 1000000
 SAMPLE_LIMIT = 1000
 
 OPTIMIZE_INTERVAL = 10
-SEQ_LENGTH = 16
-LEARN_BATCH_SIZE = 32
+SEQ_LENGTH = 8
+LEARN_BATCH_SIZE = 16
 MIN_PCL_LIMIT_OF_START_LERNING = 100
 TARGET_NET_UPDATE_INTERVAL = 10
 
 GAMMA = 0.99
-EPS_START = 0.5
+EPS_START = 0.99
 EPS_END = 0.05
 EPS_DECAY = 4000
+
+EQ_PROB = 0.9
 
 LEARNING_DEBUG = True
 IS_VANILLA_LOAM = False # is vanilla loam
 
-REWARD_ROT_RATIO = 1000
+REWARD_ROT_RATIO = 10000
 REWARD_TRANS_RATIO = 100
+
+INPUT_LAST_CONVERTED_CLOUD_MAX = 5
+LAST_CONVERTED_CLOUD_IDX_NORMALIZE_RATE = 100
 
 fileprint("A","IS_VANILLA_LOAM",IS_VANILLA_LOAM)
 fileprint("A","REPLAY_BUFFER_SIZE_LIMIT",REPLAY_BUFFER_SIZE_LIMIT)
@@ -92,6 +98,8 @@ fileprint("A","EPS_END",EPS_END)
 fileprint("A","EPS_DECAY",EPS_DECAY)
 fileprint("A","REWARD_ROT_RATIO",REWARD_ROT_RATIO)
 fileprint("A","REWARD_TRANS_RATIO",REWARD_TRANS_RATIO)
+fileprint("A","EQ_PROB",EQ_PROB)
+fileprint("A","INPUT_LAST_CONVERTED_CLOUD_MAX",INPUT_LAST_CONVERTED_CLOUD_MAX)
 
 # Do not Use
 class ReplayMemory(object):
@@ -117,6 +125,9 @@ class ReplayMemory_for_DRQN(object):
         self.point_cloud = deque()
         self.mask = deque()
         self.reward = deque()
+
+        # point cloud converted by mask and LOAM
+        self.converted_pcl = []
     
     def check_capacity(self):
         while self.__len__() > self.capacity:
@@ -125,6 +136,18 @@ class ReplayMemory_for_DRQN(object):
             self.reward.popleft()
 
     def push_point_cloud(self, in_pcl):
+
+        attach_idx_tensor = torch.full(( len(in_pcl) , 1 ),fill_value=0, dtype=torch.float32)
+        in_pcl = torch.cat( (in_pcl , attach_idx_tensor) , dim=1 )
+        for i in range( min(INPUT_LAST_CONVERTED_CLOUD_MAX , len(self.converted_pcl) ) ):
+            conv_pcl = self.converted_pcl[-1-i].clone()
+            attach_idx_tensor = torch.full(( len(conv_pcl) , 1 ),fill_value= (i+1)*LAST_CONVERTED_CLOUD_IDX_NORMALIZE_RATE , dtype=torch.float32)
+            
+            #print (conv_pcl.shape , attach_idx_tensor.shape)
+            conv_pcl = torch.cat( (conv_pcl , attach_idx_tensor) , dim=1 )
+            #print (in_pcl.shape,conv_pcl.shape)
+            in_pcl = torch.cat( (in_pcl , conv_pcl) , dim=0 )
+
         self.point_cloud.append(in_pcl)
         self.check_capacity()
     
@@ -135,6 +158,9 @@ class ReplayMemory_for_DRQN(object):
     def push_reward(self,in_reward):
         self.reward.append(in_reward)
         self.check_capacity()
+    
+    def push_converted_pcl(self,in_pcl):
+        self.converted_pcl.append(in_pcl)
     
     def get_last_point_cloud(self):
         if len(self.point_cloud) == 0:
@@ -223,8 +249,11 @@ class AgentDQNPointNet(AgentDQN):
     def init_networks(self, *network_args):
         self.class_num = network_args[0]
         self.ring_part_num = self.class_num.bit_length()-1
-        self.policy_net = PointNet_LSTM(class_num=self.class_num , point_dimention=3)
-        self.target_net = PointNet_LSTM(class_num=self.class_num , point_dimention=3)
+        self.policy_net = PointNet_LSTM(class_num=self.class_num , point_dimention=4)
+        self.target_net = PointNet_LSTM(class_num=self.class_num , point_dimention=4)
+
+        #self.policy_net.load_state_dict( torch.load("/home/kojima/saved_data/odometry_pomdp_loop1/" + "model_weight.pth") )
+
         self.target_net.load_state_dict( self.policy_net.state_dict() )
         self.target_net.eval()
         self.optimizer = optim.Adam(self.policy_net.parameters() , lr=0.001 , betas=(0.9, 0.999), eps=1e-08, weight_decay=0 ,amsgrad=False )
@@ -257,33 +286,42 @@ class AgentDQNPointNet(AgentDQN):
     def get_mask(self, pointcloud : PointCloudXYZI):
 
         converted_pointcloud = self.convert_inputcloud_to_tensor(pointcloud , SAMPLE_LIMIT)
+        self.replay_buffer.push_point_cloud(converted_pointcloud.pos)
+        converted_pointcloud = Data( pos=self.replay_buffer.get_last_point_cloud() )
 
         batch_pcl_indices = torch.zeros( converted_pointcloud.pos.shape[0] ,dtype=torch.long , device=device)
         wrapping_batch = MyBatch( batch_pcl_indices , converted_pointcloud.pos )
 
         #q_data,long_memory_c,short_memory_h = self.policy_net(wrapping_batch)
 
-        self.replay_buffer.push_point_cloud(converted_pointcloud)
-
         eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * self.num_processed_pcl / EPS_DECAY)
         
         with torch.no_grad():
             self.policy_net.eval() ; print ("set policy net to eval() mode in get_mask()")
             q_data = self.policy_net(wrapping_batch)
+            print (q_data)
             q_max_idx = torch.argmax(q_data[0])
 
             if IS_VANILLA_LOAM:
                 mask = self.class_num-1
                 binary_mask = [ 1 if (2**i) & mask else 0 for i in range( self.ring_part_num ) ]
                 self.replay_buffer.push_mask(mask)
+            
+            elif random.random() < EQ_PROB and len(self.replay_buffer.mask) != 0:
+                last_mask = self.replay_buffer.get_last_mask()
+                binary_mask = [ 1 if (2**i) & last_mask else 0 for i in range( self.ring_part_num ) ]
+                self.replay_buffer.push_mask(last_mask)
+                print ("mask is not changed")
 
             elif random.random() > eps_threshold and q_max_idx != 0:
                 binary_mask = [ 1 if (2**i) & q_max_idx else 0 for i in range( self.ring_part_num ) ]
                 self.replay_buffer.push_mask(q_max_idx)
+                print ("mask from policy net")
             else:
                 random_mask = random.randint(1,self.class_num-1)
                 binary_mask = [ 1 if (2**i) & random_mask else 0 for i in range( self.ring_part_num ) ]
                 self.replay_buffer.push_mask(random_mask)
+                print ("mask from random generator")
 
             return binary_mask
 
@@ -311,13 +349,13 @@ class AgentDQNPointNet(AgentDQN):
         for seq_idx in range(SEQ_LENGTH-1):
             
             # create batch
-            concatinated_pcl = torch.zeros(0,3,dtype=torch.float32,device=device)  # point clouds concatinated to one tensor
+            concatinated_pcl = torch.zeros(0,4,dtype=torch.float32,device=device)  # point clouds concatinated to one tensor
             batch_pcl_indices = [] # batch_pcl_indices[i] = id of the batch which the i-th point belongs
 
             for batch_idx in range(LEARN_BATCH_SIZE):
                 p = sampled_pcls[batch_idx][seq_idx]
-                concatinated_pcl = torch.cat( (concatinated_pcl , p.pos) , dim=0 )
-                batch_pcl_indices += [batch_idx] * len(p.pos)
+                concatinated_pcl = torch.cat( (concatinated_pcl , p) , dim=0 )
+                batch_pcl_indices += [batch_idx] * len(p)
 
             batch_pcl_indices = torch.tensor(batch_pcl_indices , dtype=torch.long , device=device)
             wrapping_batch = MyBatch( batch_pcl_indices , concatinated_pcl )
@@ -336,12 +374,12 @@ class AgentDQNPointNet(AgentDQN):
         self.target_net.eval()
         
         # create target net input data
-        concatinated_pcl = torch.zeros(0,3,dtype=torch.float32,device=device)  # point clouds concatinated to one tensor
+        concatinated_pcl = torch.zeros(0,4,dtype=torch.float32,device=device)  # point clouds concatinated to one tensor
         batch_pcl_indices = [] # batch_pcl_indices[i] = id of the batch which the i-th point belongs
         for batch_idx in range(LEARN_BATCH_SIZE):
             p = sampled_pcls[batch_idx][SEQ_LENGTH-1]
-            concatinated_pcl = torch.cat( (concatinated_pcl , p.pos) , dim=0 )
-            batch_pcl_indices += [batch_idx] * len(p.pos)
+            concatinated_pcl = torch.cat( (concatinated_pcl , p) , dim=0 )
+            batch_pcl_indices += [batch_idx] * len(p)
         batch_pcl_indices = torch.tensor(batch_pcl_indices , dtype=torch.long , device=device)
         wrapping_batch = MyBatch( batch_pcl_indices , concatinated_pcl )
         # get Q(s',a') from target net
@@ -455,7 +493,7 @@ class AgentDQNPointNet(AgentDQN):
 
         print ("Reduction ratio:" , reduction_ratio)
         #reward = reduction_ratio - REWARD_ROT_RATIO * rot_error_abs - REWARD_TRANS_RATIO * trans_error_abs
-        reward = 2 - REWARD_ROT_RATIO * rot_error_abs - REWARD_TRANS_RATIO * trans_error_abs
+        reward = 10 - REWARD_ROT_RATIO * rot_error_abs - REWARD_TRANS_RATIO * trans_error_abs
 
         self.last_rot_error = rot_error
         self.last_trans_error = trans_error
@@ -475,7 +513,10 @@ class AgentDQNPointNet(AgentDQN):
             if abs(self.past_trans_errors[-1-i]) * OK_LIMIT > abs(trans_error):
                 okcnt += 1
         
-        reward = okcnt / (2 * look_num)
+        if look_num == 0:
+            reward = 0
+        else:
+            reward = okcnt / (2 * look_num)
 
         self.past_rot_errors.append(rot_error)
         self.past_trans_errors.append(trans_error)
@@ -483,6 +524,10 @@ class AgentDQNPointNet(AgentDQN):
         self.last_rot_error = rot_error
         self.last_trans_error = trans_error
         return reward
+    
+    def get_converted_cloud(self, input_cloud : torch.tensor):
+        self.replay_buffer.push_converted_pcl(input_cloud)
+
     
 
 # my batch type (i can't understand torch_geometirc.data.Batch)

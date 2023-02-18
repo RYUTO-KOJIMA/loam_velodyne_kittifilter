@@ -17,6 +17,8 @@ import error_calc_util as ecu
 from collections import deque
 import time
 
+import tf.transformations
+
 import point_cloud_util as pcu
 import matplotlib.pyplot as plt
 import learning_util
@@ -27,6 +29,8 @@ from data_util import SAVE_DATA_PATH
 import os
 import torch
 import subprocess
+
+import random
 
 DATASET_DIR = ""
 
@@ -43,7 +47,7 @@ ODOMETRY_FILENAME = "odometry.json"
 EVALUATED_DATA_PREFIX = "gen"
 
 fileprint("A","RING_PART_NUM",RING_PART_NUM)
-
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 lengths = [ 100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0 ]
 lengths2 = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 80.0, 100.0]
@@ -83,6 +87,9 @@ class KittiFilter:
         self.cnt_get_raw_pcl = 0
         self.cnt_published_filtered_pcl = 0
         self.cnt_get_result = 0
+
+        # stock of masked point cloud
+        self.last_published_pointcloud = None
 
         # print data
         fileprint("A","SEQUENCE_ID",self.sequence_id)
@@ -128,6 +135,7 @@ class KittiFilter:
         #    min_ring = min(min_ring , r)
         #print (min_ring,max_ring)
 
+        self.last_published_pointcloud = tmp_pointcloud
         filtered_published_msg = tmp_pointcloud.get_converted_pointcloud_to_pc2_pointcloud2()
 
         time.sleep(PUBLISH_WAIT)
@@ -163,7 +171,21 @@ class KittiFilter:
         self.mIntegratedTransforms.append(
             ecu.ConvertToTwistTimed(data)
         )
-    
+
+        # calc converted_point_cloud
+        sample_pnum = min(learning_util.SAMPLE_LIMIT , self.last_published_pointcloud.get_point_num())
+        sample_idxs = [i for i in range(self.last_published_pointcloud.get_point_num())]
+        random.shuffle(sample_idxs)
+        pos_list = [ [self.last_published_pointcloud.points[i].x ,
+                      self.last_published_pointcloud.points[i].y ,
+                      self.last_published_pointcloud.points[i].z]
+                      for i in sample_idxs[:sample_pnum] ]
+        last_publishd_cloud_pos = np.array(pos_list , dtype=np.float32)
+        converted_cloud_np = pcu.transform_pcl0(last_publishd_cloud_pos , data)
+        converted_cloud_tc = torch.from_numpy(converted_cloud_np).clone()
+        converted_cloud_tc = converted_cloud_tc.to(device=device,dtype=torch.float32)
+        self.agent.get_converted_cloud(converted_cloud_tc)
+
         #process corresponding to json conversion and readout
         pose = self.mIntegratedTransforms[-1]
 
